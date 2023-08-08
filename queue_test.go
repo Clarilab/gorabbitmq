@@ -129,6 +129,10 @@ func connectToRabbit(queueName string) (Queue, error) {
 type loggingContextKey struct{}
 
 func TestSendWithContext(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	connection, err := NewConnection(ConnectionSettings{
 		Host:     "localhost",
 		Password: "guest",
@@ -202,6 +206,10 @@ func validateContext(in, out map[string]interface{}) bool {
 }
 
 func Test_Middleware(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	connection, err := NewConnection(ConnectionSettings{
 		Host:     "localhost",
 		Password: "guest",
@@ -277,6 +285,10 @@ func Middleware() MiddlewareFunc {
 }
 
 func Test_CorrelationID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	const correlationID string = "0123456789"
 
 	connSettings := ConnectionSettings{

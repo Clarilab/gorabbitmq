@@ -57,7 +57,7 @@ func getConnectionString(queueSettings ConnectionSettings) string {
 	return sb.String()
 }
 
-// NewConnection returns a new Instance of a tcp Connection to a RabbitMQ Server
+// NewConnection returns a new Instance of a tcp Connection to a RabbitMQ Server.
 func NewConnection(settings ConnectionSettings, channelSettings ChannelSettings) (QueueConnector, error) {
 	connectionString := getConnectionString(settings)
 
@@ -95,7 +95,6 @@ func (c *queueConnector) watchChannelConnection() {
 }
 
 func (c *queueConnector) watchChannelClosed() {
-
 }
 
 func (c *queueConnector) createChannel() error {
@@ -141,13 +140,12 @@ func (c *channel) close() {
 	c.channel.Close()
 }
 
-// ConnectToChannel connects to a channel
+// ConnectToChannel connects to a channel.
 func (c *queueConnector) ConnectToQueue(queueSettings QueueSettings, configSetter ...ConfigBuilder) (Queue, error) {
 	rabbitmq.Debug = true
 
 	if c.channel == nil || c.channel.closed {
 		err := c.createChannel()
-
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +159,6 @@ func (c *queueConnector) ConnectToQueue(queueSettings QueueSettings, configSette
 		queueSettings.NoWait,
 		nil,
 	)
-
 	if err != nil {
 		return nil, err
 	}

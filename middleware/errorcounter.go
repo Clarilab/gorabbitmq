@@ -1,9 +1,8 @@
 package middleware
 
 import (
-	"github.com/pkg/errors"
-
 	"github.com/Clarilab/gorabbitmq/v4"
+	"github.com/pkg/errors"
 )
 
 // ErrorCounter can be used to extract the ErrorCounter from the context.
@@ -12,7 +11,7 @@ type ErrorCounter struct{}
 const errorCounterKey = "@errorCounter"
 
 // ErrorCounterConfig configures the ErrorCounter Middleware.
-// TODO validate
+// TODO validate.
 type ErrorCounterConfig struct {
 	MaxRetries         int32
 	MaxRetriesExceeded func(gorabbitmq.Context, error) error

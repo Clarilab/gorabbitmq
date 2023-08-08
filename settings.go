@@ -1,6 +1,6 @@
 package gorabbitmq
 
-// ConnectionSettings holds settings for a rabbitMQConnector connection
+// ConnectionSettings holds settings for a rabbitMQConnector connection.
 type ConnectionSettings struct {
 	// UserName contains the username of the rabbitMQ user
 	UserName string `json:"userName,omitempty"`
@@ -12,7 +12,7 @@ type ConnectionSettings struct {
 	Port int `json:"port,omitempty"`
 }
 
-// QueueSettings holds the configurationf for a Channel
+// QueueSettings holds the configurationf for a Channel.
 type QueueSettings struct {
 	// QueueName contains the name of the queue
 	QueueName string `json:"queueName,omitempty"`
