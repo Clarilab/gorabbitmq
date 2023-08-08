@@ -20,6 +20,10 @@ type TestTask struct {
 }
 
 func TestConsume(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	enqueue, err := connectToRabbit("test_queue")
 	if err != nil {
 		t.Error(err)
