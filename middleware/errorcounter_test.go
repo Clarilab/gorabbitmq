@@ -11,6 +11,10 @@ import (
 )
 
 func Test_Middleware(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	connection, err := gorabbitmq.NewConnection(gorabbitmq.ConnectionSettings{
 		Host:     "localhost",
 		Password: "guest",
