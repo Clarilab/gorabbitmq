@@ -1,13 +1,17 @@
 package gorabbitmq_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"reflect"
 	"sync"
 	"testing"
@@ -1014,6 +1018,129 @@ func Test_DecodeDeliveryBody(t *testing.T) {
 	}
 }
 
+type testBuffer struct {
+	mtx  *sync.Mutex
+	buff *bytes.Buffer
+}
+
+func (tb *testBuffer) Write(p []byte) (int, error) {
+	tb.mtx.Lock()
+	defer tb.mtx.Unlock()
+
+	return tb.buff.Write(p)
+}
+
+func (tb *testBuffer) ReadBytes(delim byte) ([]byte, error) {
+	tb.mtx.Lock()
+	defer tb.mtx.Unlock()
+
+	return tb.buff.ReadBytes(delim)
+}
+
+func (tb *testBuffer) Reset() {
+	tb.mtx.Lock()
+	defer tb.mtx.Unlock()
+
+	tb.buff.Reset()
+}
+
+func (tb *testBuffer) Len() int {
+	tb.mtx.Lock()
+	defer tb.mtx.Unlock()
+
+	return tb.buff.Len()
+}
+
+func Test_Reconnection(t *testing.T) { //nolint:paralleltest // intentional: must not run in parallel
+	type logEntry struct {
+		Time  time.Time `json:"time"`
+		Level string    `json:"level"`
+		Msg   string    `json:"msg"`
+	}
+
+	buff := new(bytes.Buffer)
+
+	buffer := &testBuffer{
+		mtx:  &sync.Mutex{},
+		buff: buff,
+	}
+
+	connector := getConnector(
+		gorabbitmq.WithConnectorOptionJSONLogging(buffer, slog.LevelDebug),
+	)
+
+	t.Cleanup(func() {
+		err := connector.Close()
+		requireNoError(t, err)
+	})
+
+	doneChan := make(chan struct{})
+
+	message := "test-message"
+
+	var msgCounter int
+
+	handler := func(msg gorabbitmq.Delivery) gorabbitmq.Action {
+		requireEqual(t, message, string(msg.Body))
+
+		msgCounter++
+
+		doneChan <- struct{}{}
+
+		return gorabbitmq.Ack
+	}
+
+	queueName := stringGen()
+
+	_, err := connector.RegisterConsumer(queueName, handler,
+		gorabbitmq.WithQueueOptionDurable(true),
+		gorabbitmq.WithConsumerOptionConsumerName(stringGen()),
+	)
+	requireNoError(t, err)
+
+	publisher, err := connector.NewPublisher()
+	requireNoError(t, err)
+
+	err = publisher.Publish(context.Background(), queueName, message)
+	requireNoError(t, err)
+
+	<-doneChan
+
+	requireEqual(t, 1, msgCounter)
+
+	err = exec.Command("docker", "compose", "down", "rabbitmq").Run()
+	requireNoError(t, err)
+
+	err = exec.Command("docker", "compose", "up", "-d").Run()
+	requireNoError(t, err)
+
+	for {
+		line, err := buffer.ReadBytes('\n')
+		if errors.Is(err, io.EOF) {
+			continue
+		}
+
+		var logEntry logEntry
+
+		_ = json.Unmarshal(line, &logEntry)
+
+		if buffer.Len() == 0 {
+			buffer.Reset()
+		}
+
+		if logEntry.Msg == "successfully reconnected consume connection" {
+			break
+		}
+	}
+
+	err = publisher.Publish(context.Background(), queueName, message)
+	requireNoError(t, err)
+
+	<-doneChan
+
+	requireEqual(t, 2, msgCounter)
+}
+
 func getConnector(options ...gorabbitmq.ConnectorOption) *gorabbitmq.Connector {
 	return gorabbitmq.NewConnector(&gorabbitmq.ConnectionSettings{
 		UserName: "guest",
@@ -1044,12 +1171,12 @@ func requireNoError(t *testing.T, err error) {
 }
 
 func stringGen() string {
-	bytes := make([]byte, 16)
+	buffer := make([]byte, 16)
 
-	_, err := rand.Read(bytes)
+	_, err := rand.Read(buffer)
 	if err != nil {
 		return ""
 	}
 
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(buffer)
 }
