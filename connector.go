@@ -15,6 +15,8 @@ const (
 	consume string = "consume"
 
 	closeWGDelta int = 2
+
+	reconnectFailChanSize int = 16
 )
 
 // Connector manages the connection to a RabbitMQ cluster.
@@ -95,6 +97,14 @@ func (c *Connector) DecodeDeliveryBody(delivery Delivery, v any) error {
 	}
 
 	return nil
+}
+
+func (c *Connector) NotifyPublishRecoveryFailed() <-chan ReconnectionFailError {
+	return c.publishConnection.reconnectFailChan
+}
+
+func (c *Connector) NotifyConsumeRecoveryFailed() <-chan ReconnectionFailError {
+	return c.publishConnection.reconnectFailChan
 }
 
 func connect(conn *connection, opt *ConnectorOptions, logger *log, instanceType string) error {

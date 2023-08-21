@@ -38,6 +38,7 @@ func (c *Connector) NewPublisher(options ...PublishOption) (*Publisher, error) {
 			connectionCloseWG: &sync.WaitGroup{},
 			publishersMtx:     &sync.Mutex{},
 			publishers:        make(map[string]*Publisher),
+			reconnectFailChan: make(chan ReconnectionFailError, reconnectFailChanSize),
 		}
 	}
 

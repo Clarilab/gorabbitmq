@@ -49,6 +49,7 @@ func (c *Connector) newConsumer(queueName string, options ...ConsumeOption) (*Co
 			consumersMtx:      &sync.Mutex{},
 			consumers:         make(map[string]*Consumer),
 			consumerCloseChan: unsubscribeChan,
+			reconnectFailChan: make(chan ReconnectionFailError, reconnectFailChanSize),
 		}
 	}
 
