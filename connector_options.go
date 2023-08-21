@@ -10,8 +10,10 @@ import (
 )
 
 const (
-	defaultReconnectInterval time.Duration = 5 * time.Second
-	defaultPrefetchCount     int           = 0
+	defaultReconnectInterval   time.Duration = time.Second
+	defaultMaxReconnectRetries int           = 20
+	defaultBackoffFactor       int           = 1
+	defaultPrefetchCount       int           = 0
 )
 
 type (
@@ -25,12 +27,14 @@ type (
 	// ConnectorOptions are used to describe how a new connector will be created.
 	ConnectorOptions struct {
 		ReturnHandler
-		logger            []*slog.Logger
-		Config            *Config
-		Codec             *codec
-		uri               string
-		PrefetchCount     int
-		ReconnectInterval time.Duration
+		logger              []*slog.Logger
+		Config              *Config
+		Codec               *codec
+		uri                 string
+		PrefetchCount       int
+		ReconnectInterval   time.Duration
+		MaxReconnectRetries int
+		BackoffFactor       int
 	}
 
 	// ConnectionSettings holds settings for a rabbitMQConnector connection.
@@ -50,8 +54,10 @@ type (
 
 func defaultConnectorOptions(uri string) *ConnectorOptions {
 	return &ConnectorOptions{
-		uri:               uri,
-		ReconnectInterval: defaultReconnectInterval,
+		uri:                 uri,
+		ReconnectInterval:   defaultReconnectInterval,
+		MaxReconnectRetries: defaultMaxReconnectRetries,
+		BackoffFactor:       defaultBackoffFactor,
 		Config: &Config{
 			Properties: make(amqp.Table),
 		},

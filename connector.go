@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/url"
 	"strconv"
-	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -23,13 +22,8 @@ type Connector struct {
 	options *ConnectorOptions
 	log     *log
 
-	publishConn    *amqp.Connection
-	publishChannel *amqp.Channel
-	publishCloseWG *sync.WaitGroup
-
-	consumeConn    *amqp.Connection
-	consumeChannel *amqp.Channel
-	consumeCloseWG *sync.WaitGroup
+	publishConnection *connection
+	consumeConnection *connection
 }
 
 // NewConnector creates a new Connector instance.
@@ -52,10 +46,8 @@ func NewConnector(settings *ConnectionSettings, options ...ConnectorOption) *Con
 	}
 
 	return &Connector{
-		options:        opt,
-		publishCloseWG: &sync.WaitGroup{},
-		consumeCloseWG: &sync.WaitGroup{},
-		log:            newLogger(opt.logger),
+		options: opt,
+		log:     newLogger(opt.logger),
 	}
 }
 
@@ -63,28 +55,30 @@ func NewConnector(settings *ConnectionSettings, options ...ConnectorOption) *Con
 func (c *Connector) Close() error {
 	const errMessage = "failed to close connections to rabbitmq gracefully: %w"
 
-	if c.publishConn != nil {
+	if c.publishConnection != nil &&
+		c.publishConnection.amqpConnection != nil {
 		c.log.logDebug("closing connection", "type", publish)
 
-		c.publishCloseWG.Add(closeWGDelta)
+		c.publishConnection.closeWG.Add(closeWGDelta)
 
-		if err := c.publishConn.Close(); err != nil {
+		if err := c.publishConnection.amqpConnection.Close(); err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 
-		c.publishCloseWG.Wait()
+		c.publishConnection.closeWG.Wait()
 	}
 
-	if c.consumeConn != nil {
+	if c.consumeConnection != nil &&
+		c.consumeConnection.amqpConnection != nil {
 		c.log.logDebug("closing connection", "type", consume)
 
-		c.consumeCloseWG.Add(closeWGDelta)
+		c.consumeConnection.closeWG.Add(closeWGDelta)
 
-		if err := c.consumeConn.Close(); err != nil {
+		if err := c.consumeConnection.amqpConnection.Close(); err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 
-		c.consumeCloseWG.Wait()
+		c.consumeConnection.closeWG.Wait()
 	}
 
 	c.log.logInfo("gracefully closed connections to rabbitmq")
@@ -103,109 +97,118 @@ func (c *Connector) DecodeDeliveryBody(delivery Delivery, v any) error {
 	return nil
 }
 
-type connectParams struct {
-	conn         *amqp.Connection
-	channel      *amqp.Channel
-	opt          *ConnectorOptions
-	closeWG      *sync.WaitGroup
-	logger       *log
-	instanceType string
-}
-
-func connect(params *connectParams) (*amqp.Connection, *amqp.Channel, error) {
+func connect(conn *connection, opt *ConnectorOptions, logger *log, instanceType string) error {
 	const errMessage = "failed to connect to rabbitmq: %w"
 
-	conn := params.conn
-	channel := params.channel
-	var err error
-
-	if params.conn == nil {
-		conn, err = amqp.DialConfig(params.opt.uri, amqp.Config(*params.opt.Config))
+	if conn.amqpConnection == nil {
+		err := createConnection(conn, opt, instanceType, logger)
 		if err != nil {
-			return nil, nil, fmt.Errorf(errMessage, err)
+			return fmt.Errorf(errMessage, err)
 		}
 
-		watchConnectionNotifications(conn, publish, params.closeWG, params.logger)
-
-		channel, err = createChannel(conn, params.opt.PrefetchCount)
+		err = createChannel(conn, opt, instanceType, logger)
 		if err != nil {
-			return nil, nil, fmt.Errorf(errMessage, err)
+			return fmt.Errorf(errMessage, err)
 		}
 
-		watchChannelNotifications(channel, publish, params.opt.ReturnHandler, params.closeWG, params.logger)
+		conn.reconnChan = make(chan struct{})
+
+		conn.reconnector(instanceType, opt, logger)
+		conn.watchUnsubscriptions()
 	}
 
-	return conn, channel, nil
+	return nil
 }
 
-func createChannel(conn *amqp.Connection, prefetchCount int) (*amqp.Channel, error) {
+func createConnection(conn *connection, opt *ConnectorOptions, instanceType string, logger *log) error {
 	const errMessage = "failed to create channel: %w"
 
-	channel, err := conn.Channel()
+	var err error
+
+	conn.amqpConnection, err = amqp.DialConfig(opt.uri, amqp.Config(*opt.Config))
 	if err != nil {
-		return nil, fmt.Errorf(errMessage, err)
+		return fmt.Errorf(errMessage, err)
 	}
 
-	if prefetchCount > 0 {
-		err = channel.Qos(prefetchCount, 0, false)
+	watchConnectionNotifications(conn, instanceType, logger)
+
+	return nil
+}
+
+func createChannel(conn *connection, opt *ConnectorOptions, instanceType string, logger *log) error {
+	const errMessage = "failed to create channel: %w"
+
+	var err error
+
+	conn.amqpChannel, err = conn.amqpConnection.Channel()
+	if err != nil {
+		return fmt.Errorf(errMessage, err)
+	}
+
+	if opt.PrefetchCount > 0 {
+		err = conn.amqpChannel.Qos(opt.PrefetchCount, 0, false)
 		if err != nil {
-			return nil, fmt.Errorf(errMessage, err)
+			return fmt.Errorf(errMessage, err)
 		}
 	}
 
-	return channel, nil
+	watchChannelNotifications(conn, instanceType, opt.ReturnHandler, logger)
+
+	return nil
 }
 
-func watchConnectionNotifications(conn *amqp.Connection, name string, closeWG *sync.WaitGroup, logger *log) {
-	closeChan := conn.NotifyClose(make(chan *amqp.Error))
-	blockChan := conn.NotifyBlocked(make(chan amqp.Blocking))
+func watchConnectionNotifications(conn *connection, instanceType string, logger *log) {
+	closeChan := conn.amqpConnection.NotifyClose(make(chan *amqp.Error))
+	blockChan := conn.amqpConnection.NotifyBlocked(make(chan amqp.Blocking))
 
 	go func() {
 		for {
 			select {
 			case err := <-closeChan:
 				if err == nil {
-					slog.Debug("closed connection", "type", name)
+					slog.Debug("closed connection", "type", instanceType)
 
-					closeWG.Done()
+					conn.closeWG.Done()
 
 					return
 				}
 
-				//nolint: godox // follow-up task
-				// TODO: reconnect logic
-				logger.logDebug("connection unexpectedly closed", "type", name, "cause", err)
+				logger.logDebug("connection unexpectedly closed", "type", instanceType, "cause", err)
+
+				conn.reconnChan <- struct{}{}
+
+				return
 
 			case block := <-blockChan:
-				logger.logWarn("connection exception", "type", name, "cause", block.Reason)
+				logger.logWarn("connection exception", "type", instanceType, "cause", block.Reason)
 			}
 		}
 	}()
 }
 
-func watchChannelNotifications(channel *amqp.Channel, name string, returnHandler ReturnHandler, closeWG *sync.WaitGroup, logger *log) {
-	closeChan := channel.NotifyClose(make(chan *amqp.Error))
-	cancelChan := channel.NotifyCancel(make(chan string))
-	returnChan := channel.NotifyReturn(make(chan amqp.Return))
+func watchChannelNotifications(conn *connection, instanceType string, returnHandler ReturnHandler, logger *log) {
+	closeChan := conn.amqpChannel.NotifyClose(make(chan *amqp.Error))
+	cancelChan := conn.amqpChannel.NotifyCancel(make(chan string))
+	returnChan := conn.amqpChannel.NotifyReturn(make(chan amqp.Return))
 
 	go func() {
 		for {
 			select {
 			case err := <-closeChan:
 				if err == nil {
-					slog.Debug("closed channel", "type", name)
+					slog.Debug("closed channel", "type", instanceType)
 
-					closeWG.Done()
+					conn.closeWG.Done()
 
 					return
 				}
 
-				//nolint: godox // follow-up task
-				// TODO: reconnect logic
-				logger.logDebug("channel unexpectedly closed", "type", name, "cause", err)
+				logger.logDebug("channel unexpectedly closed", "type", instanceType, "cause", err)
+
+				return
 
 			case tag := <-cancelChan:
-				logger.logWarn("cancel exception", "type", name, "cause", tag)
+				logger.logWarn("cancel exception", "type", instanceType, "cause", tag)
 
 			case rtrn := <-returnChan:
 				if returnHandler != nil {

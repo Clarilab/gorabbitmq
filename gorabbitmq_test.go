@@ -61,7 +61,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -88,7 +88,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -115,7 +115,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -147,7 +147,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -184,7 +184,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 			}
 
 			if test.passiveExchange {
-				consumer, err := connector.NewConsumerAndSubscribe(
+				consumer, err := connector.RegisterConsumer(
 					testParams.queueName,
 					nil,
 					gorabbitmq.WithExchangeOptionDeclare(true),
@@ -196,7 +196,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 
 				requireNoError(t, err)
 
-				err = consumer.Unsubscribe()
+				err = consumer.Close()
 				requireNoError(t, err)
 			}
 
@@ -244,7 +244,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, queueName string) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					queueName,
 					handler,
 					gorabbitmq.WithQueueOptionAutoDelete(true),
@@ -269,7 +269,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, queueName string) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					queueName,
 					handler,
 					gorabbitmq.WithQueueOptionAutoDelete(true),
@@ -293,7 +293,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, queueName string) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					queueName,
 					handler,
 					gorabbitmq.WithQueueOptionAutoDelete(true),
@@ -317,7 +317,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, queueName string) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					queueName,
 					handler,
 					gorabbitmq.WithQueueOptionAutoDelete(true),
@@ -340,7 +340,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, queueName string) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					queueName,
 					handler,
 					gorabbitmq.WithQueueOptionAutoDelete(true),
@@ -370,11 +370,11 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 			queueName := stringGen()
 
 			if test.passiveQueue {
-				consumer, err := connector.NewConsumerAndSubscribe(queueName, nil)
+				consumer, err := connector.RegisterConsumer(queueName, nil)
 
 				requireNoError(t, err)
 
-				err = consumer.Unsubscribe()
+				err = consumer.Close()
 				requireNoError(t, err)
 			}
 
@@ -418,7 +418,7 @@ func Test_Integration_Consume(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -445,7 +445,7 @@ func Test_Integration_Consume(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -478,7 +478,7 @@ func Test_Integration_Consume(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -505,7 +505,7 @@ func Test_Integration_Consume(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -532,7 +532,7 @@ func Test_Integration_Consume(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -557,7 +557,7 @@ func Test_Integration_Consume(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -582,7 +582,7 @@ func Test_Integration_Consume(t *testing.T) {
 				}
 			},
 			getConsumer: func(c *gorabbitmq.Connector, handler gorabbitmq.HandlerFunc, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					handler,
 					gorabbitmq.WithExchangeOptionAutoDelete(true),
@@ -773,7 +773,7 @@ func Test_Integration_CustomOptions(t *testing.T) {
 
 			wg.Add(2)
 
-			_, err := test.connector.NewConsumerAndSubscribe(
+			_, err := test.connector.RegisterConsumer(
 				targets[0],
 				test.deliveryHandler(message, wg),
 				gorabbitmq.WithQueueOptionAutoDelete(true),
@@ -781,7 +781,7 @@ func Test_Integration_CustomOptions(t *testing.T) {
 			)
 			requireNoError(t, err)
 
-			_, err = test.connector.NewConsumerAndSubscribe(targets[1], test.deliveryHandler(message, wg), gorabbitmq.WithCustomConsumeOptions(
+			_, err = test.connector.RegisterConsumer(targets[1], test.deliveryHandler(message, wg), gorabbitmq.WithCustomConsumeOptions(
 				&gorabbitmq.ConsumeOptions{
 					ConsumerOptions: &gorabbitmq.ConsumerOptions{
 						Args: make(gorabbitmq.Table),
@@ -823,7 +823,7 @@ func Test_Integration_ManualRemoveExchangeQueueAndBindings(t *testing.T) {
 	}{
 		"remove queue": {
 			getConsumer: func(c *gorabbitmq.Connector, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(params.queueName, nil)
+				return c.RegisterConsumer(params.queueName, nil)
 			},
 			action: func(consumer *gorabbitmq.Consumer, params *testParams) error {
 				removedMessages, err := consumer.RemoveQueue(params.queueName, false, false, false)
@@ -836,7 +836,7 @@ func Test_Integration_ManualRemoveExchangeQueueAndBindings(t *testing.T) {
 		},
 		"remove exchange": {
 			getConsumer: func(c *gorabbitmq.Connector, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					nil,
 					gorabbitmq.WithExchangeOptionDeclare(true),
@@ -855,7 +855,7 @@ func Test_Integration_ManualRemoveExchangeQueueAndBindings(t *testing.T) {
 		},
 		"remove binding": {
 			getConsumer: func(c *gorabbitmq.Connector, params *testParams) (*gorabbitmq.Consumer, error) {
-				return c.NewConsumerAndSubscribe(
+				return c.RegisterConsumer(
 					params.queueName,
 					nil,
 					gorabbitmq.WithQueueOptionAutoDelete(true),
@@ -910,31 +910,6 @@ func Test_Integration_ManualRemoveExchangeQueueAndBindings(t *testing.T) {
 	}
 }
 
-func Test_Integration_SubscribingTwiceReturnsError(t *testing.T) {
-	t.Parallel()
-
-	connector := getConnector()
-
-	t.Cleanup(func() {
-		err := connector.Close()
-		requireNoError(t, err)
-	})
-
-	consumer, err := connector.NewConsumerAndSubscribe(
-		"test-queue",
-		nil,
-		gorabbitmq.WithQueueOptionAutoDelete(true),
-	)
-	requireNoError(t, err)
-
-	err = consumer.Subscribe(nil)
-
-	requireEqual(t, gorabbitmq.ErrAlreadySubscribed, cause(err))
-
-	err = consumer.Unsubscribe()
-	requireNoError(t, err)
-}
-
 func Test_Integration_ReturnHandler(t *testing.T) {
 	t.Parallel()
 
@@ -964,7 +939,7 @@ func Test_Integration_ReturnHandler(t *testing.T) {
 	queueName := stringGen()
 	routingKey := stringGen()
 
-	_, err := connector.NewConsumerAndSubscribe(
+	_, err := connector.RegisterConsumer(
 		queueName,
 		nil,
 		gorabbitmq.WithExchangeOptionDeclare(true),
@@ -1066,23 +1041,6 @@ func requireNoError(t *testing.T, err error) {
 	if err != nil {
 		t.Error(err)
 	}
-}
-
-func cause(err error) error {
-	type causer interface {
-		Unwrap() error
-	}
-
-	for err != nil {
-		cause, ok := err.(causer) //nolint: errorlint // expected behavior
-		if !ok {
-			break
-		}
-
-		err = cause.Unwrap()
-	}
-
-	return err
 }
 
 func stringGen() string {

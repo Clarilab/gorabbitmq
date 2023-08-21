@@ -2,6 +2,7 @@ package gorabbitmq
 
 import (
 	"log/slog"
+	"os"
 )
 
 type log struct {
@@ -16,6 +17,14 @@ func (l *log) logDebug(msg string, args ...any) {
 	for i := range l.logger {
 		l.logger[i].Debug(msg, args...)
 	}
+}
+
+func (l *log) logFatal(msg string, args ...any) {
+	for i := range l.logger {
+		l.logger[i].Error(msg, args...)
+	}
+
+	os.Exit(1) //nolint: revive // intended use of os.Exit
 }
 
 func (l *log) logError(msg string, args ...any) {
