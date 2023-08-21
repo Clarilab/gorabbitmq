@@ -10,20 +10,20 @@ import (
 )
 
 type connection struct {
-	amqpConnection  *amqp.Connection
-	amqpChannel     *amqp.Channel
-	closeWG         *sync.WaitGroup
-	reconnChan      chan struct{}
-	unsubscribeChan chan string
-	consumersMtx    *sync.Mutex
-	consumers       map[string]*Consumer
-	publishersMtx   *sync.Mutex
-	publishers      map[string]*Publisher
+	amqpConnection    *amqp.Connection
+	amqpChannel       *amqp.Channel
+	connectionCloseWG *sync.WaitGroup
+	reconnectChan     chan struct{}
+	consumerCloseChan chan string
+	consumersMtx      *sync.Mutex
+	consumers         map[string]*Consumer
+	publishersMtx     *sync.Mutex
+	publishers        map[string]*Publisher
 }
 
-func (c *connection) watchUnsubscriptions() {
+func (c *connection) watchConsumerClose() {
 	go func() {
-		for consumer := range c.unsubscribeChan {
+		for consumer := range c.consumerCloseChan {
 			c.consumersMtx.Lock()
 
 			maps.DeleteFunc(c.consumers, func(k string, v *Consumer) bool {
@@ -35,51 +35,44 @@ func (c *connection) watchUnsubscriptions() {
 	}()
 }
 
-func (c *connection) reconnector(instanceType string, opt *ConnectorOptions, logger *log) {
+func (c *connection) watchReconnects(instanceType string, opt *ConnectorOptions, logger *log) {
 	go func() {
-		for range c.reconnChan {
-			c.reconnect(instanceType, opt, logger)
+		for range c.reconnectChan {
+			c.amqpConnection = nil
+			c.amqpChannel = nil
+
+			backoff(
+				func() error {
+					err := createConnection(c, opt, instanceType, logger)
+					if err != nil {
+						return err
+					}
+
+					err = createChannel(c, opt, instanceType, logger)
+					if err != nil {
+						return err
+					}
+
+					return nil
+				},
+				&backoffParams{
+					initDelay:  opt.ReconnectInterval,
+					maxRetries: opt.MaxReconnectRetries,
+					factor:     opt.BackoffFactor,
+				},
+				logger,
+			)
+
+			c.recoverPublishers(logger)
+
+			err := c.recoverConsumers(logger)
+			if err != nil {
+				logger.logFatal("reconnection failed", "error", err)
+			}
+
+			logger.logInfo(fmt.Sprintf("successfully reconnected %s connection", instanceType))
 		}
 	}()
-}
-
-func (c *connection) reconnect(instanceType string, opt *ConnectorOptions, logger *log) {
-	c.amqpConnection = nil
-	c.amqpChannel = nil
-
-	backoff(
-		func() error {
-			err := createConnection(c, opt, instanceType, logger)
-			if err != nil {
-				return err
-			}
-
-			err = createChannel(c, opt, instanceType, logger)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		},
-		&backoffParams{
-			backoffMessage: "failed to reconnect to rabbitmq: backing off...",
-			successMessage: "successfully reestablished connection to rabbitmq",
-			fatalMessage:   "reconnection to rabbitmq failed! maximum retries exceeded",
-			initDelay:      opt.ReconnectInterval,
-			maxRetries:     opt.MaxReconnectRetries,
-			factor:         opt.BackoffFactor,
-		},
-		logger,
-	)
-
-	c.recoverPublishers(logger)
-
-	err := c.recoverConsumers(logger)
-	if err != nil {
-		logger.logFatal("reconnection failed", "error", err)
-	}
-
-	logger.logInfo(fmt.Sprintf("successfully reconnected %s connection", instanceType))
 }
 
 func (c *connection) recoverPublishers(logger *log) {
@@ -123,12 +116,9 @@ func (c *connection) recoverConsumers(logger *log) error {
 }
 
 type backoffParams struct {
-	initDelay      time.Duration
-	factor         int
-	maxRetries     int
-	backoffMessage string
-	successMessage string
-	fatalMessage   string
+	initDelay  time.Duration
+	factor     int
+	maxRetries int
 }
 
 func backoff(action backoffAction, params *backoffParams, logger *log) {
@@ -136,20 +126,20 @@ func backoff(action backoffAction, params *backoffParams, logger *log) {
 
 	for retry <= params.maxRetries {
 		if action() == nil {
-			logger.logDebug(params.successMessage, "retries", retry)
+			logger.logDebug("successfully reestablished connection to rabbitmq", "retries", retry)
 
 			break
 		}
 
 		if retry == params.maxRetries {
-			logger.logFatal(params.fatalMessage, "retries", retry)
+			logger.logFatal("reconnection to rabbitmq failed! maximum retries exceeded", "retries", retry)
 		}
 
-		dly := time.Duration(params.factor*retry) * params.initDelay
+		delay := time.Duration(params.factor*retry) * params.initDelay
 
-		logger.logDebug(params.backoffMessage, "backoff-time", dly.String())
+		logger.logDebug("failed to reconnect to rabbitmq: backing off...", "backoff-time", delay.String())
 
-		time.Sleep(dly)
+		time.Sleep(delay)
 
 		retry++
 	}

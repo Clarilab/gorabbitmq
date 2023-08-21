@@ -11,8 +11,8 @@ import (
 
 const (
 	defaultReconnectInterval   time.Duration = time.Second
-	defaultMaxReconnectRetries int           = 20
-	defaultBackoffFactor       int           = 1
+	defaultMaxReconnectRetries int           = 10
+	defaultBackoffFactor       int           = 2
 	defaultPrefetchCount       int           = 0
 )
 
@@ -150,4 +150,25 @@ func WithConnectorOptionDecoder(decoder JSONDecoder) ConnectorOption {
 // by this return handler.
 func WithConnectorOptionReturnHandler(returnHandler ReturnHandler) ConnectorOption {
 	return func(options *ConnectorOptions) { options.ReturnHandler = returnHandler }
+}
+
+// WithConnectorOptionReconnectInterval sets the initial reconnection interval.
+//
+// Default: 1s.
+func WithConnectorOptionReconnectInterval(interval time.Duration) ConnectorOption {
+	return func(options *ConnectorOptions) { options.ReconnectInterval = interval }
+}
+
+// WithConnectorOptionMaxReconnectRetries sets the limit for maximum retries.
+//
+// Default: 10.
+func WithConnectorOptionMaxReconnectRetries(maxRetries int) ConnectorOption {
+	return func(options *ConnectorOptions) { options.MaxReconnectRetries = maxRetries }
+}
+
+// WithConnectorOptionBackoffFactor sets the exponential backoff factor.
+//
+// Default: 2.
+func WithConnectorOptionBackoffFactor(factor int) ConnectorOption {
+	return func(options *ConnectorOptions) { options.BackoffFactor = factor }
 }

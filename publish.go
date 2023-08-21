@@ -35,9 +35,9 @@ func (c *Connector) NewPublisher(options ...PublishOption) (*Publisher, error) {
 
 	if c.publishConnection == nil {
 		c.publishConnection = &connection{
-			closeWG:       &sync.WaitGroup{},
-			publishersMtx: &sync.Mutex{},
-			publishers:    make(map[string]*Publisher),
+			connectionCloseWG: &sync.WaitGroup{},
+			publishersMtx:     &sync.Mutex{},
+			publishers:        make(map[string]*Publisher),
 		}
 	}
 

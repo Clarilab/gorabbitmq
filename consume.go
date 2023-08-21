@@ -45,10 +45,10 @@ func (c *Connector) newConsumer(queueName string, options ...ConsumeOption) (*Co
 
 	if c.consumeConnection == nil {
 		c.consumeConnection = &connection{
-			closeWG:         &sync.WaitGroup{},
-			consumersMtx:    &sync.Mutex{},
-			consumers:       make(map[string]*Consumer),
-			unsubscribeChan: unsubscribeChan,
+			connectionCloseWG: &sync.WaitGroup{},
+			consumersMtx:      &sync.Mutex{},
+			consumers:         make(map[string]*Consumer),
+			consumerCloseChan: unsubscribeChan,
 		}
 	}
 
@@ -73,15 +73,15 @@ func (c *Connector) RegisterConsumer(queueName string, handler HandlerFunc, opti
 		return nil, fmt.Errorf(errMessage, err)
 	}
 
-	if err = consumer.registerConsumer(c.consumeConnection, handler); err != nil {
+	if err = consumer.registerAndStartConsumer(c.consumeConnection, handler); err != nil {
 		return nil, fmt.Errorf(errMessage, err)
 	}
 
 	return consumer, nil
 }
 
-func (c *Consumer) registerConsumer(conn *connection, handler HandlerFunc) error {
-	const errMessage = "failed to register consumer: %w"
+func (c *Consumer) registerAndStartConsumer(conn *connection, handler HandlerFunc) error {
+	const errMessage = "failed to start consumer: %w"
 
 	c.handler = handler
 

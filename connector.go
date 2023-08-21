@@ -59,26 +59,26 @@ func (c *Connector) Close() error {
 		c.publishConnection.amqpConnection != nil {
 		c.log.logDebug("closing connection", "type", publish)
 
-		c.publishConnection.closeWG.Add(closeWGDelta)
+		c.publishConnection.connectionCloseWG.Add(closeWGDelta)
 
 		if err := c.publishConnection.amqpConnection.Close(); err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 
-		c.publishConnection.closeWG.Wait()
+		c.publishConnection.connectionCloseWG.Wait()
 	}
 
 	if c.consumeConnection != nil &&
 		c.consumeConnection.amqpConnection != nil {
 		c.log.logDebug("closing connection", "type", consume)
 
-		c.consumeConnection.closeWG.Add(closeWGDelta)
+		c.consumeConnection.connectionCloseWG.Add(closeWGDelta)
 
 		if err := c.consumeConnection.amqpConnection.Close(); err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 
-		c.consumeConnection.closeWG.Wait()
+		c.consumeConnection.connectionCloseWG.Wait()
 	}
 
 	c.log.logInfo("gracefully closed connections to rabbitmq")
@@ -111,10 +111,10 @@ func connect(conn *connection, opt *ConnectorOptions, logger *log, instanceType 
 			return fmt.Errorf(errMessage, err)
 		}
 
-		conn.reconnChan = make(chan struct{})
+		conn.reconnectChan = make(chan struct{})
 
-		conn.reconnector(instanceType, opt, logger)
-		conn.watchUnsubscriptions()
+		conn.watchReconnects(instanceType, opt, logger)
+		conn.watchConsumerClose()
 	}
 
 	return nil
@@ -168,14 +168,14 @@ func watchConnectionNotifications(conn *connection, instanceType string, logger 
 				if err == nil {
 					slog.Debug("closed connection", "type", instanceType)
 
-					conn.closeWG.Done()
+					conn.connectionCloseWG.Done()
 
 					return
 				}
 
 				logger.logDebug("connection unexpectedly closed", "type", instanceType, "cause", err)
 
-				conn.reconnChan <- struct{}{}
+				conn.reconnectChan <- struct{}{}
 
 				return
 
@@ -198,7 +198,7 @@ func watchChannelNotifications(conn *connection, instanceType string, returnHand
 				if err == nil {
 					slog.Debug("closed channel", "type", instanceType)
 
-					conn.closeWG.Done()
+					conn.connectionCloseWG.Done()
 
 					return
 				}
