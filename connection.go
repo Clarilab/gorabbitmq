@@ -78,6 +78,7 @@ func (c *connection) watchReconnects(instanceType string, opt *ConnectorOptions,
 func (c *connection) recoverPublishers(logger *log) {
 	if c.publishers != nil {
 		c.publishersMtx.Lock()
+
 		for i := range c.publishers {
 			publisher := c.publishers[i]
 

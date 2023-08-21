@@ -56,9 +56,8 @@ func (c *Connector) NewPublisher(options ...PublishOption) (*Publisher, error) {
 	}
 
 	c.publishConnection.publishersMtx.Lock()
-	defer c.publishConnection.publishersMtx.Unlock()
-
 	c.publishConnection.publishers[publisherName] = publisher
+	c.publishConnection.publishersMtx.Unlock()
 
 	return publisher, nil
 }

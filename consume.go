@@ -86,9 +86,8 @@ func (c *Consumer) registerAndStartConsumer(conn *connection, handler HandlerFun
 	c.handler = handler
 
 	conn.consumersMtx.Lock()
-	defer conn.consumersMtx.Unlock()
-
 	conn.consumers[c.options.ConsumerOptions.Name] = c
+	conn.consumersMtx.Unlock()
 
 	if err := c.startConsuming(); err != nil {
 		return fmt.Errorf(errMessage, err)

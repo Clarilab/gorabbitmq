@@ -187,6 +187,9 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 				routingKey:   stringGen(),
 			}
 
+			// connecting to a passive exchange requires the exchange to exist beforehand
+			// so here the exchange gets declared before the binding is declared.
+
 			if test.passiveExchange {
 				consumer, err := connector.RegisterConsumer(
 					testParams.queueName,
@@ -217,6 +220,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 
 			<-doneChan
 
+			// cleaning up the passive exchange again
 			if test.passiveExchange {
 				err = consumer.RemoveExchange(testParams.exchangeName, false, false)
 				requireNoError(t, err)
@@ -373,6 +377,9 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 			doneChan := make(chan struct{})
 			queueName := stringGen()
 
+			// connecting to a passive queue requires the queue to exist beforehand
+			// so here the queue gets declared before the consumer subscribes.
+
 			if test.passiveQueue {
 				consumer, err := connector.RegisterConsumer(queueName, nil)
 
@@ -393,6 +400,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 
 			<-doneChan
 
+			// cleaning up the passive queue again
 			if test.passiveQueue {
 				_, err = consumer.RemoveQueue(queueName, false, false, false)
 				requireNoError(t, err)
@@ -775,8 +783,10 @@ func Test_Integration_CustomOptions(t *testing.T) {
 
 			wg := &sync.WaitGroup{}
 
+			// adding 2 to wait for both consumers to handle their deliveries.
 			wg.Add(2)
 
+			// registering first consumer.
 			_, err := test.connector.RegisterConsumer(
 				targets[0],
 				test.deliveryHandler(message, wg),
@@ -785,6 +795,7 @@ func Test_Integration_CustomOptions(t *testing.T) {
 			)
 			requireNoError(t, err)
 
+			// registering second consumer with custom options.
 			_, err = test.connector.RegisterConsumer(targets[1], test.deliveryHandler(message, wg), gorabbitmq.WithCustomConsumeOptions(
 				&gorabbitmq.ConsumeOptions{
 					ConsumerOptions: &gorabbitmq.ConsumerOptions{
@@ -810,6 +821,7 @@ func Test_Integration_CustomOptions(t *testing.T) {
 			publisher, err := test.getPublisher(test.connector)
 			requireNoError(t, err)
 
+			// publishing to multiple targets
 			err = test.publish(publisher, targets)
 			requireNoError(t, err)
 
@@ -961,9 +973,13 @@ func Test_Integration_ReturnHandler(t *testing.T) {
 	)
 	requireNoError(t, err)
 
+	// publishing a mandatory message with a routing key with out the existence of a binding.
 	err = publisher.Publish(context.TODO(), "does-not-exist", message)
 	requireNoError(t, err)
 
+	// the publishing is retured to the return handler.
+
+	// waiting for the return handler to process the message.
 	<-doneChan
 }
 
@@ -1018,11 +1034,15 @@ func Test_DecodeDeliveryBody(t *testing.T) {
 	}
 }
 
+// testBuffer is used as buffer for the logging io.Writer
+// with mutex protection for concurrent access.
 type testBuffer struct {
 	mtx  *sync.Mutex
 	buff *bytes.Buffer
 }
 
+// Write implements io.Writer interface.
+// Calls the underlying bytes.Buffer method with mutex protection.
 func (tb *testBuffer) Write(p []byte) (int, error) {
 	tb.mtx.Lock()
 	defer tb.mtx.Unlock()
@@ -1030,6 +1050,7 @@ func (tb *testBuffer) Write(p []byte) (int, error) {
 	return tb.buff.Write(p)
 }
 
+// ReadBytes calls the underlying bytes.Buffer method with mutex protection.
 func (tb *testBuffer) ReadBytes(delim byte) ([]byte, error) {
 	tb.mtx.Lock()
 	defer tb.mtx.Unlock()
@@ -1037,6 +1058,7 @@ func (tb *testBuffer) ReadBytes(delim byte) ([]byte, error) {
 	return tb.buff.ReadBytes(delim)
 }
 
+// ReadBytes calls the underlying bytes.Buffer method with mutex protection.
 func (tb *testBuffer) Reset() {
 	tb.mtx.Lock()
 	defer tb.mtx.Unlock()
@@ -1044,6 +1066,7 @@ func (tb *testBuffer) Reset() {
 	tb.buff.Reset()
 }
 
+// ReadBytes calls the underlying bytes.Buffer method with mutex protection.
 func (tb *testBuffer) Len() int {
 	tb.mtx.Lock()
 	defer tb.mtx.Unlock()
@@ -1052,19 +1075,26 @@ func (tb *testBuffer) Len() int {
 }
 
 func Test_Reconnection(t *testing.T) { //nolint:paralleltest // intentional: must not run in parallel
+	// logEntry is the log entry that will be written to the buffer.
 	type logEntry struct {
 		Time  time.Time `json:"time"`
 		Level string    `json:"level"`
 		Msg   string    `json:"msg"`
 	}
 
-	buff := new(bytes.Buffer)
+	// used to wait until the handler proccessed the deliveries.
+	doneChan := make(chan struct{})
 
+	message := "test-message"
+
+	// declaring the mutex protected buffer.
 	buffer := &testBuffer{
 		mtx:  &sync.Mutex{},
-		buff: buff,
+		buff: new(bytes.Buffer),
 	}
 
+	// declaring the connector with JSON logging on debug level enabled.
+	// (later used to compare if the reconnection was successful).
 	connector := getConnector(
 		gorabbitmq.WithConnectorOptionJSONLogging(buffer, slog.LevelDebug),
 	)
@@ -1074,10 +1104,7 @@ func Test_Reconnection(t *testing.T) { //nolint:paralleltest // intentional: mus
 		requireNoError(t, err)
 	})
 
-	doneChan := make(chan struct{})
-
-	message := "test-message"
-
+	// msgCounter is used to count the number of deliveries, to compare it afterwords.
 	var msgCounter int
 
 	handler := func(msg gorabbitmq.Delivery) gorabbitmq.Action {
@@ -1092,27 +1119,38 @@ func Test_Reconnection(t *testing.T) { //nolint:paralleltest // intentional: mus
 
 	queueName := stringGen()
 
+	// registering a consumer.
 	_, err := connector.RegisterConsumer(queueName, handler,
 		gorabbitmq.WithQueueOptionDurable(true),
 		gorabbitmq.WithConsumerOptionConsumerName(stringGen()),
 	)
 	requireNoError(t, err)
 
+	// registering a publisher.
 	publisher, err := connector.NewPublisher()
 	requireNoError(t, err)
 
+	// publish a message.
 	err = publisher.Publish(context.Background(), queueName, message)
 	requireNoError(t, err)
 
+	// waiting for the handler to process the delivery.
 	<-doneChan
 
+	// comparing the msgCounter that should be incremented by the consumer handler.
 	requireEqual(t, 1, msgCounter)
 
+	// shutting down the rabbitmq container to simulate a connection loss.
 	err = exec.Command("docker", "compose", "down", "rabbitmq").Run()
 	requireNoError(t, err)
 
+	// bringing the rabbitmq container up again.
 	err = exec.Command("docker", "compose", "up", "-d").Run()
 	requireNoError(t, err)
+
+	// While trying to reconnect, the logger writes information about the reconnection state on debug level.
+	// In the following for loop, the buffer given to the logger is read until the msg in the
+	// log-entry states that reconnection was successful.
 
 	for {
 		line, err := buffer.ReadBytes('\n')
@@ -1133,14 +1171,20 @@ func Test_Reconnection(t *testing.T) { //nolint:paralleltest // intentional: mus
 		}
 	}
 
+	// publish a new message to the queue with the reconnected .
 	err = publisher.Publish(context.Background(), queueName, message)
 	requireNoError(t, err)
 
+	// waiting for the recovered consumer to process the new message.
 	<-doneChan
 
+	// comparing the msgCounter again that should now be incremented by the consumer handler to 2.
 	requireEqual(t, 2, msgCounter)
 }
 
+// ##### helper functions: ##########################
+
+// Returns a new connector with the given options.
 func getConnector(options ...gorabbitmq.ConnectorOption) *gorabbitmq.Connector {
 	return gorabbitmq.NewConnector(&gorabbitmq.ConnectionSettings{
 		UserName: "guest",
@@ -1152,6 +1196,7 @@ func getConnector(options ...gorabbitmq.ConnectorOption) *gorabbitmq.Connector {
 	)
 }
 
+// Compares two values and reports an error if they are not equal.
 func requireEqual(t *testing.T, expected any, actual any) {
 	t.Helper()
 
@@ -1162,6 +1207,7 @@ func requireEqual(t *testing.T, expected any, actual any) {
 	}
 }
 
+// Ensures that err is nil, otherwise it reports an error.
 func requireNoError(t *testing.T, err error) {
 	t.Helper()
 
@@ -1170,6 +1216,8 @@ func requireNoError(t *testing.T, err error) {
 	}
 }
 
+// Generates a random string for names (e.g. queue-names, exchange-names, routing-keys)
+// that need to be unique since almost all tests run in parallel.
 func stringGen() string {
 	buffer := make([]byte, 16)
 
