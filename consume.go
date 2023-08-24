@@ -45,11 +45,14 @@ func (c *Connector) newConsumer(queueName string, options ...ConsumeOption) (*Co
 
 	if c.consumeConnection == nil {
 		c.consumeConnection = &connection{
-			connectionCloseWG: &sync.WaitGroup{},
-			consumersMtx:      &sync.Mutex{},
-			consumers:         make(map[string]*Consumer),
-			consumerCloseChan: unsubscribeChan,
-			reconnectFailChan: make(chan ReconnectionFailError, reconnectFailChanSize),
+			amqpConnectionMtx:    &sync.Mutex{},
+			amqpChannelMtx:       &sync.Mutex{},
+			connectionCloseWG:    &sync.WaitGroup{},
+			consumersMtx:         &sync.Mutex{},
+			consumers:            make(map[string]*Consumer),
+			consumerCloseChan:    unsubscribeChan,
+			reconnectFailChanMtx: &sync.Mutex{},
+			reconnectFailChan:    make(chan error, reconnectFailChanSize),
 		}
 	}
 

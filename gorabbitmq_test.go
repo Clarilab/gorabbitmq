@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1074,7 +1075,7 @@ func (tb *testBuffer) Len() int {
 	return tb.buff.Len()
 }
 
-func Test_Reconnection(t *testing.T) { //nolint:paralleltest // intentional: must not run in parallel
+func Test_Reconnection_AutomaticReconnect(t *testing.T) { //nolint:paralleltest // intentional: must not run in parallel
 	// logEntry is the log entry that will be written to the buffer.
 	type logEntry struct {
 		Time  time.Time `json:"time"`
@@ -1170,6 +1171,106 @@ func Test_Reconnection(t *testing.T) { //nolint:paralleltest // intentional: mus
 			break
 		}
 	}
+
+	// publish a new message to the queue with the reconnected .
+	err = publisher.Publish(context.Background(), queueName, message)
+	requireNoError(t, err)
+
+	// waiting for the recovered consumer to process the new message.
+	<-doneChan
+
+	// comparing the msgCounter again that should now be incremented by the consumer handler to 2.
+	requireEqual(t, 2, msgCounter)
+}
+
+func Test_Reconnection_AutomaticReconnectFailedTryManualReconnect(t *testing.T) { //nolint:paralleltest // intentional: must not run in parallel
+	// used to wait until the handler proccessed the deliveries.
+	doneChan := make(chan struct{})
+
+	message := "test-message"
+
+	// declaring the connector with a maximum of 1 reconnection attempts.
+	connector := getConnector(
+		gorabbitmq.WithConnectorOptionMaxReconnectRetries(1),
+	)
+
+	t.Cleanup(func() {
+		err := connector.Close()
+		requireNoError(t, err)
+	})
+
+	// msgCounter is used to count the number of deliveries, to compare it afterwords.
+	var msgCounter int
+
+	handler := func(msg gorabbitmq.Delivery) gorabbitmq.Action {
+		requireEqual(t, message, string(msg.Body))
+
+		msgCounter++
+
+		doneChan <- struct{}{}
+
+		return gorabbitmq.Ack
+	}
+
+	queueName := stringGen()
+
+	// registering a consumer.
+	_, err := connector.RegisterConsumer(queueName, handler,
+		gorabbitmq.WithQueueOptionDurable(true),
+		gorabbitmq.WithConsumerOptionConsumerName(stringGen()),
+	)
+	requireNoError(t, err)
+
+	// registering a publisher.
+	publisher, err := connector.NewPublisher()
+	requireNoError(t, err)
+
+	// publish a message.
+	err = publisher.Publish(context.Background(), queueName, message)
+	requireNoError(t, err)
+
+	notifyChan, err := connector.NotifyFailedRecovery()
+	requireNoError(t, err)
+
+	notifyDoneChan := make(chan struct{})
+
+	// handling the failed recovery notification.
+	go func() {
+		for range notifyChan {
+			notifyDoneChan <- struct{}{}
+		}
+	}()
+
+	// waiting for the handler to process the delivery.
+	<-doneChan
+
+	// comparing the msgCounter that should be incremented by the consumer handler.
+	requireEqual(t, 1, msgCounter)
+
+	// shutting down the rabbitmq container to simulate a connection loss.
+	err = exec.Command("docker", "compose", "down", "rabbitmq").Run()
+	requireNoError(t, err)
+
+	// waiting for the failed recovery notification to finish handling.
+	<-notifyDoneChan
+
+	// bringing the rabbitmq container up again.
+	err = exec.Command("docker", "compose", "up", "-d").Run()
+	requireNoError(t, err)
+
+	// polling to check the container health.
+	for range time.NewTicker(1 * time.Second).C {
+		status, err := exec.Command("docker", "inspect", "-f", "{{.State.Health.Status}}", "rabbitmq").Output()
+		requireNoError(t, err)
+
+		if strings.ReplaceAll(string(status), "\n", "") == "healthy" {
+			break
+		}
+	}
+
+	// manually reconnecting.
+	err = connector.Reconnect()
+	requireNoError(t, err)
 
 	// publish a new message to the queue with the reconnected .
 	err = publisher.Publish(context.Background(), queueName, message)

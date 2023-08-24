@@ -10,16 +10,24 @@ import (
 )
 
 type connection struct {
+	amqpConnectionMtx *sync.Mutex
 	amqpConnection    *amqp.Connection
-	amqpChannel       *amqp.Channel
+
+	amqpChannelMtx *sync.Mutex
+	amqpChannel    *amqp.Channel
+
 	connectionCloseWG *sync.WaitGroup
-	reconnectChan     chan struct{}
-	reconnectFailChan chan ReconnectionFailError
+
+	reconnectChan        chan struct{}
+	reconnectFailChanMtx *sync.Mutex
+	reconnectFailChan    chan error
+
 	consumerCloseChan chan string
 	consumersMtx      *sync.Mutex
 	consumers         map[string]*Consumer
-	publishersMtx     *sync.Mutex
-	publishers        map[string]*Publisher
+
+	publishersMtx *sync.Mutex
+	publishers    map[string]*Publisher
 }
 
 func (c *connection) watchConsumerClose() {
@@ -39,47 +47,14 @@ func (c *connection) watchConsumerClose() {
 func (c *connection) watchReconnects(instanceType string, opt *ConnectorOptions, logger *log) {
 	go func() {
 		for range c.reconnectChan {
-			c.amqpConnection = nil
-			c.amqpChannel = nil
-
-			err := backoff(
-				func() error {
-					err := createConnection(c, opt, instanceType, logger)
-					if err != nil {
-						return err
-					}
-
-					err = createChannel(c, opt, instanceType, logger)
-					if err != nil {
-						return err
-					}
-
-					return nil
-				},
-				&backoffParams{
-					initDelay:  opt.ReconnectInterval,
-					maxRetries: opt.MaxReconnectRetries,
-					factor:     opt.BackoffFactor,
-				},
-				c.reconnectFailChan,
-				logger,
-			)
+			err := c.reconnect(instanceType, opt, logger)
 			if err != nil {
-				break
+				c.reconnectFailChanMtx.Lock()
+				c.reconnectFailChan <- err
+				c.reconnectFailChanMtx.Unlock()
+
+				return
 			}
-
-			c.recoverPublishers(logger)
-
-			err = c.recoverConsumers(logger)
-			if err != nil {
-				c.reconnectFailChan <- ReconnectionFailError{msg: fmt.Sprintf("reconnection failed: %s", err.Error())}
-
-				logger.logDebug("reconnection failed: maximum retries exceeded", "")
-
-				break
-			}
-
-			logger.logInfo(fmt.Sprintf("successfully reconnected %s connection", instanceType))
 		}
 	}()
 }
@@ -98,6 +73,53 @@ func (c *connection) recoverPublishers(logger *log) {
 
 		c.publishersMtx.Unlock()
 	}
+}
+
+func (c *connection) reconnect(instanceType string, opt *ConnectorOptions, logger *log) error {
+	err := backoff(
+		func() error {
+			err := createConnection(c, opt, instanceType, logger)
+			if err != nil {
+				return err
+			}
+
+			err = createChannel(c, opt, instanceType, logger)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+		&backoffParams{
+			instanceType: instanceType,
+			initDelay:    opt.ReconnectInterval,
+			maxRetries:   opt.MaxReconnectRetries,
+			factor:       opt.BackoffFactor,
+		},
+		logger,
+	)
+	if err != nil {
+		c.amqpConnectionMtx.Lock()
+		c.amqpConnection = nil
+		c.amqpConnectionMtx.Unlock()
+
+		c.amqpChannelMtx.Lock()
+		c.amqpChannel = nil
+		c.amqpChannelMtx.Unlock()
+
+		return err
+	}
+
+	c.recoverPublishers(logger)
+
+	err = c.recoverConsumers(logger)
+	if err != nil {
+		return err
+	}
+
+	logger.logInfo(fmt.Sprintf("successfully reconnected %s connection", instanceType))
+
+	return nil
 }
 
 func (c *connection) recoverConsumers(logger *log) error {
@@ -132,15 +154,9 @@ type backoffParams struct {
 	maxRetries   int
 }
 
-type ReconnectionFailError struct {
-	msg string
-}
+func backoff(action func() error, params *backoffParams, logger *log) error {
+	const errMessage = "backoff failed %w"
 
-func (e ReconnectionFailError) Error() string {
-	return e.msg
-}
-
-func backoff(action backoffAction, params *backoffParams, failChan chan<- ReconnectionFailError, logger *log) error {
 	retry := 0
 
 	for retry <= params.maxRetries {
@@ -151,13 +167,9 @@ func backoff(action backoffAction, params *backoffParams, failChan chan<- Reconn
 		}
 
 		if retry == params.maxRetries {
-			err := ReconnectionFailError{msg: fmt.Sprintf("%s reconnection failed: maximum retries exceeded", params.instanceType)}
-
-			failChan <- err
-
 			logger.logDebug(fmt.Sprintf("%s reconnection failed: maximum retries exceeded", params.instanceType), "retries", retry)
 
-			return err
+			return fmt.Errorf(errMessage, ErrMaxRetriesExceeded)
 		}
 
 		delay := time.Duration(params.factor*retry) * params.initDelay
@@ -171,5 +183,3 @@ func backoff(action backoffAction, params *backoffParams, failChan chan<- Reconn
 
 	return nil
 }
-
-type backoffAction func() error

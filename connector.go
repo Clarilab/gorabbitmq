@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -16,13 +17,16 @@ const (
 
 	closeWGDelta int = 2
 
-	reconnectFailChanSize int = 16
+	reconnectFailChanSize int = 32
 )
 
 // Connector manages the connection to a RabbitMQ cluster.
 type Connector struct {
 	options *ConnectorOptions
 	log     *log
+
+	reconnectFailChanMtx *sync.Mutex
+	reconnectFailChan    chan error
 
 	publishConnection *connection
 	consumeConnection *connection
@@ -48,8 +52,10 @@ func NewConnector(settings *ConnectionSettings, options ...ConnectorOption) *Con
 	}
 
 	return &Connector{
-		options: opt,
-		log:     newLogger(opt.logger),
+		options:              opt,
+		log:                  newLogger(opt.logger),
+		reconnectFailChanMtx: &sync.Mutex{},
+		reconnectFailChan:    make(chan error, reconnectFailChanSize),
 	}
 }
 
@@ -63,11 +69,21 @@ func (c *Connector) Close() error {
 
 		c.publishConnection.connectionCloseWG.Add(closeWGDelta)
 
-		if err := c.publishConnection.amqpConnection.Close(); err != nil {
+		c.publishConnection.amqpConnectionMtx.Lock()
+		err := c.publishConnection.amqpConnection.Close()
+		c.publishConnection.amqpConnectionMtx.Unlock()
+
+		if err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 
 		c.publishConnection.connectionCloseWG.Wait()
+
+		c.publishConnection.reconnectFailChanMtx.Lock()
+		close(c.publishConnection.reconnectFailChan)
+		c.publishConnection.reconnectFailChanMtx.Unlock()
+
+		close(c.publishConnection.reconnectChan)
 	}
 
 	if c.consumeConnection != nil &&
@@ -76,12 +92,27 @@ func (c *Connector) Close() error {
 
 		c.consumeConnection.connectionCloseWG.Add(closeWGDelta)
 
-		if err := c.consumeConnection.amqpConnection.Close(); err != nil {
+		c.consumeConnection.amqpConnectionMtx.Lock()
+		err := c.consumeConnection.amqpConnection.Close()
+		c.consumeConnection.amqpConnectionMtx.Unlock()
+
+		if err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 
 		c.consumeConnection.connectionCloseWG.Wait()
+
+		c.consumeConnection.reconnectFailChanMtx.Lock()
+		close(c.consumeConnection.reconnectFailChan)
+		c.consumeConnection.reconnectFailChanMtx.Unlock()
+
+		close(c.consumeConnection.reconnectChan)
+		close(c.consumeConnection.consumerCloseChan)
 	}
+
+	c.reconnectFailChanMtx.Lock()
+	close(c.reconnectFailChan)
+	c.reconnectFailChanMtx.Unlock()
 
 	c.log.logInfo("gracefully closed connections to rabbitmq")
 
@@ -99,12 +130,74 @@ func (c *Connector) DecodeDeliveryBody(delivery Delivery, v any) error {
 	return nil
 }
 
-func (c *Connector) NotifyPublishRecoveryFailed() <-chan ReconnectionFailError {
-	return c.publishConnection.reconnectFailChan
+// NotifyFailedRecovery returns a channel that delivers an error if the reconnection to RabbitMQ
+// failed by exeeding the maximum number of retries.
+//
+// Should be used e.g. to then close your application gracefully, or manually trying a reconnect again.
+func (c *Connector) NotifyFailedRecovery() (<-chan error, error) {
+	const errMessage = "failed to notify failed recovery: %w"
+
+	if c.publishConnection == nil && c.consumeConnection == nil {
+		return nil, fmt.Errorf(errMessage, ErrNoActiveConnection)
+	}
+
+	c.watchReconnectionFailes()
+
+	return c.reconnectFailChan, nil
 }
 
-func (c *Connector) NotifyConsumeRecoveryFailed() <-chan ReconnectionFailError {
-	return c.publishConnection.reconnectFailChan
+// Reconnect can be used to manually reconnect to a RabbitMQ.
+//
+// Returns an error if the current connection persists.
+func (c *Connector) Reconnect() error {
+	const errMessage = "failed to reconnect to rabbitmq: %w"
+
+	c.publishConnection.amqpChannelMtx.Lock()
+	c.consumeConnection.amqpChannelMtx.Lock()
+	if c.publishConnection.amqpConnection != nil && c.consumeConnection.amqpConnection != nil {
+		c.publishConnection.amqpChannelMtx.Unlock()
+		c.consumeConnection.amqpChannelMtx.Unlock()
+
+		return fmt.Errorf(errMessage, ErrHealthyConnection)
+	}
+
+	c.publishConnection.amqpChannelMtx.Unlock()
+	c.consumeConnection.amqpChannelMtx.Unlock()
+
+	c.watchReconnectionFailes()
+
+	err := c.publishConnection.reconnect(publish, c.options, c.log)
+	if err != nil {
+		return fmt.Errorf(errMessage, err)
+	}
+
+	err = c.consumeConnection.reconnect(consume, c.options, c.log)
+	if err != nil {
+		return fmt.Errorf(errMessage, err)
+	}
+
+	return nil
+}
+
+func (c *Connector) watchReconnectionFailes() {
+	go func() {
+		for {
+			select {
+			case err := <-c.publishConnection.reconnectFailChan:
+				c.reconnectFailChanMtx.Lock()
+				c.reconnectFailChan <- err
+				c.reconnectFailChanMtx.Unlock()
+
+				return
+			case err := <-c.consumeConnection.reconnectFailChan:
+				c.reconnectFailChanMtx.Lock()
+				c.reconnectFailChan <- err
+				c.reconnectFailChanMtx.Unlock()
+
+				return
+			}
+		}
+	}()
 }
 
 func connect(conn *connection, opt *ConnectorOptions, logger *log, instanceType string) error {

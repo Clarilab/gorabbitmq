@@ -35,10 +35,13 @@ func (c *Connector) NewPublisher(options ...PublishOption) (*Publisher, error) {
 
 	if c.publishConnection == nil {
 		c.publishConnection = &connection{
-			connectionCloseWG: &sync.WaitGroup{},
-			publishersMtx:     &sync.Mutex{},
-			publishers:        make(map[string]*Publisher),
-			reconnectFailChan: make(chan ReconnectionFailError, reconnectFailChanSize),
+			amqpConnectionMtx:    &sync.Mutex{},
+			amqpChannelMtx:       &sync.Mutex{},
+			connectionCloseWG:    &sync.WaitGroup{},
+			publishersMtx:        &sync.Mutex{},
+			publishers:           make(map[string]*Publisher),
+			reconnectFailChanMtx: &sync.Mutex{},
+			reconnectFailChan:    make(chan error, reconnectFailChanSize),
 		}
 	}
 
