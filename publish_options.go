@@ -112,7 +112,7 @@ func WithPublishOptionContentType(contentType string) PublishOption {
 
 // WithPublishOptionPersistentDelivery sets the message to persist. Transient messages will
 // not be restored to durable queues, persistent messages will be restored to
-// durable queues and lost on non-durable queues during server restart. By default publishings
+// durable queues and lost on non-durable queues during server restart. By default publishing's
 // are transient.
 func WithPublishOptionPersistentDelivery(deliveryMode DeliveryMode) PublishOption {
 	return func(options *PublishOptions) { options.DeliveryMode = deliveryMode }

@@ -1147,7 +1147,7 @@ type logEntry struct {
 }
 
 func Test_Reconnection_AutomaticReconnect(t *testing.T) { //nolint:paralleltest // intentional: must not run in parallel
-	// used to wait until the handler proccessed the deliveries.
+	// used to wait until the handler processed the deliveries.
 	doneChan := make(chan struct{})
 
 	message := "test-message"
@@ -1238,7 +1238,7 @@ func Test_Reconnection_AutomaticReconnect(t *testing.T) { //nolint:paralleltest 
 	go watchConnLogBuffer(publishConnLogBuffer, wg)
 	go watchConnLogBuffer(consumeConnLogBuffer, wg)
 
-	// waiting for the both reconnections to be successful.
+	// waiting for the both connections to be successfully recovered.
 	wg.Wait()
 
 	// publish a new message to the queue with the reconnected .
@@ -1276,7 +1276,7 @@ func watchConnLogBuffer(buffer *testBuffer, wg *sync.WaitGroup) {
 }
 
 func Test_Reconnection_AutomaticReconnectFailedTryManualReconnect(t *testing.T) { //nolint:paralleltest // intentional: must not run in parallel
-	// used to wait until the handler proccessed the deliveries.
+	// used to wait until the handler processed the deliveries.
 	doneChan := make(chan struct{})
 
 	message := "test-message"
@@ -1328,11 +1328,8 @@ func Test_Reconnection_AutomaticReconnectFailedTryManualReconnect(t *testing.T) 
 	err = publisher.Publish(context.Background(), queueName, message)
 	requireNoError(t, err)
 
-	publishNotifyChan, err := publishConn.NotifyRecoveryFail()
-	requireNoError(t, err)
-
-	consumeNotifyChan, err := consumeConn.NotifyRecoveryFail()
-	requireNoError(t, err)
+	publishNotifyChan := publishConn.NotifyAutoRecoveryFail()
+	consumeNotifyChan := consumeConn.NotifyAutoRecoveryFail()
 
 	wg := &sync.WaitGroup{}
 

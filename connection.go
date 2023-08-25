@@ -103,21 +103,15 @@ func (c *Connection) Close() error {
 	return nil
 }
 
-// NotifyRecoveryFail returns a channel that will return an error when
-// the recovery has exeeded the maximum number of retries.
-func (c *Connection) NotifyRecoveryFail() (<-chan error, error) {
-	return c.recoveryFailedChan, nil
+// NotifyAutoRecoveryFail returns a channel that will return an error when
+// the recovery has exceeded the maximum number of retries.
+func (c *Connection) NotifyAutoRecoveryFail() <-chan error {
+	return c.recoveryFailedChan
 }
 
 // Reconnect can be used to manually reconnect to a RabbitMQ.
-//
-// Returns an error if the current connection persists.
 func (c *Connection) Reconnect() error {
 	const errMessage = "failed to reconnect to rabbitmq: %w"
-
-	if c.amqpConnection != nil && !c.amqpConnection.IsClosed() {
-		return fmt.Errorf(errMessage, ErrHealthyConnection)
-	}
 
 	err := c.startRecovery()
 	if err != nil {
@@ -327,7 +321,10 @@ func (c *Connection) watchRecoveryChan() {
 func (c *Connection) startRecovery() error {
 	const errMessage = "recovery failed: %w"
 
-	err := c.backoff(
+	c.amqpConnection = nil
+	c.amqpChannel = nil
+
+	err := c.backOff(
 		func() error {
 			err := c.createConnection()
 			if err != nil {
@@ -343,9 +340,6 @@ func (c *Connection) startRecovery() error {
 		},
 	)
 	if err != nil {
-		c.amqpConnection = nil
-		c.amqpChannel = nil
-
 		return fmt.Errorf(errMessage, err)
 	}
 
@@ -376,8 +370,8 @@ func (c *Connection) recoverConsumer() error {
 	return nil
 }
 
-func (c *Connection) backoff(action func() error) error {
-	const errMessage = "backoff failed %w"
+func (c *Connection) backOff(action func() error) error {
+	const errMessage = "back-off failed %w"
 
 	retry := 0
 
@@ -394,9 +388,9 @@ func (c *Connection) backoff(action func() error) error {
 			return fmt.Errorf(errMessage, ErrMaxRetriesExceeded)
 		}
 
-		delay := time.Duration(c.options.BackoffFactor*retry) * c.options.ReconnectInterval
+		delay := time.Duration(c.options.BackOffFactor*retry) * c.options.ReconnectInterval
 
-		c.logger.logDebug("failed to reconnect: backing off...", "backoff-time", delay.String())
+		c.logger.logDebug("failed to reconnect: backing off...", "back-off-time", delay.String())
 
 		time.Sleep(delay)
 

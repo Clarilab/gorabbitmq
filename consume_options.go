@@ -275,7 +275,7 @@ func WithConsumerOptionConsumerExclusive(exclusive bool) ConsumeOption {
 	return func(options *ConsumeOptions) { options.ConsumerOptions.Exclusive = exclusive }
 }
 
-// WithConsumerOptionNoWait sets the exclusive nowait property of this consumer, which means
+// WithConsumerOptionNoWait sets the exclusive no-wait property of this consumer, which means
 // it does not wait for the server to confirm the request and
 // immediately begin deliveries. If it is not possible to consume, a channel
 // exception will be raised and the channel will be closed.

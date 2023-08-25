@@ -12,7 +12,7 @@ import (
 const (
 	defaultReconnectInterval   time.Duration = time.Second
 	defaultMaxReconnectRetries int           = 10
-	defaultBackoffFactor       int           = 2
+	defaultBackOffFactor       int           = 2
 	defaultPrefetchCount       int           = 0
 )
 
@@ -34,7 +34,7 @@ type (
 		PrefetchCount       int
 		ReconnectInterval   time.Duration
 		MaxReconnectRetries int
-		BackoffFactor       int
+		BackOffFactor       int
 	}
 
 	// ConnectionSettings holds settings for a RabbitMQ connection.
@@ -57,7 +57,7 @@ func defaultConnectionOptions(uri string) *ConnectionOptions {
 		uri:                 uri,
 		ReconnectInterval:   defaultReconnectInterval,
 		MaxReconnectRetries: defaultMaxReconnectRetries,
-		BackoffFactor:       defaultBackoffFactor,
+		BackOffFactor:       defaultBackOffFactor,
 		Config: &Config{
 			Properties: make(amqp.Table),
 		},
@@ -166,9 +166,9 @@ func WithConnectionOptionMaxReconnectRetries(maxRetries int) ConnectionOption {
 	return func(options *ConnectionOptions) { options.MaxReconnectRetries = maxRetries }
 }
 
-// WithConnectionOptionBackoffFactor sets the exponential backoff factor.
+// WithConnectionOptionBackOffFactor sets the exponential back-off factor.
 //
 // Default: 2.
-func WithConnectionOptionBackoffFactor(factor int) ConnectionOption {
-	return func(options *ConnectionOptions) { options.BackoffFactor = factor }
+func WithConnectionOptionBackOffFactor(factor int) ConnectionOption {
+	return func(options *ConnectionOptions) { options.BackOffFactor = factor }
 }
