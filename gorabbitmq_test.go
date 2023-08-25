@@ -1037,7 +1037,7 @@ func Test_Integration_ReturnHandler(t *testing.T) {
 	<-doneChan
 }
 
-func Test_DecodeDeliveryBody(t *testing.T) {
+func Test_Integration_DecodeDeliveryBody(t *testing.T) {
 	t.Parallel()
 
 	message := testData{
