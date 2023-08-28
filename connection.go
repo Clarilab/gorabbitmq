@@ -39,20 +39,11 @@ type Connection struct {
 
 // NewConnection creates a new connection.
 //
-// Needs to be closed with the Close() method.
-func NewConnection(settings *ConnectionSettings, options ...ConnectionOption) (*Connection, error) {
+// Must be closed with the Close() method to conserve resources!
+func NewConnection(uri string, options ...ConnectionOption) (*Connection, error) {
 	const errMessage = "failed to create connection %w"
 
-	opt := defaultConnectionOptions(
-		fmt.Sprintf("amqp://%s:%s@%s/",
-			url.QueryEscape(settings.UserName),
-			url.QueryEscape(settings.Password),
-			net.JoinHostPort(
-				url.QueryEscape(settings.Host),
-				strconv.Itoa(settings.Port),
-			),
-		),
-	)
+	opt := defaultConnectionOptions(uri)
 
 	for i := 0; i < len(options); i++ {
 		options[i](opt)
@@ -74,6 +65,18 @@ func NewConnection(settings *ConnectionSettings, options ...ConnectionOption) (*
 	}
 
 	return conn, nil
+}
+
+// SettingsToURI can be used to convert a ConnectionSettings struct to a valid AMQP URI to ensure correct escaping.
+func SettingsToURI(settings *ConnectionSettings) string {
+	return fmt.Sprintf("amqp://%s:%s@%s/",
+		url.QueryEscape(settings.UserName),
+		url.QueryEscape(settings.Password),
+		net.JoinHostPort(
+			url.QueryEscape(settings.Host),
+			strconv.Itoa(settings.Port),
+		),
+	)
 }
 
 // Close gracefully closes the connection to the server.
@@ -168,6 +171,17 @@ func (c *Connection) RemoveExchange(name string, ifUnused bool, noWait bool) err
 
 	err := c.amqpChannel.ExchangeDelete(name, ifUnused, noWait)
 	if err != nil {
+		return fmt.Errorf(errMessage, err)
+	}
+
+	return nil
+}
+
+// DecodeDeliveryBody can be used to decode the body of a delivery into v.
+func (c *Connection) DecodeDeliveryBody(delivery Delivery, v any) error {
+	const errMessage = "failed to decode delivery body: %w"
+
+	if err := c.options.Codec.Decoder(delivery.Body, v); err != nil {
 		return fmt.Errorf(errMessage, err)
 	}
 

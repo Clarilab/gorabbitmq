@@ -59,25 +59,23 @@ func NewConsumer(conn *Connection, queueName string, handler HandlerFunc, option
 }
 
 // Close stops consuming messages from the subscribed queue.
+//
+// When using the dead letter retry with enabled cleanup, the consumer must be closed
+// to perform the cleanup.
 func (c *Consumer) Close() error {
 	const errMessage = "failed to unsubscribe consumer: %w"
+
+	if c.options.RetryOptions != nil && c.options.RetryOptions.Cleanup {
+		if err := c.cleanupDeadLetterRetry(); err != nil {
+			return fmt.Errorf(errMessage, err)
+		}
+	}
 
 	if err := c.conn.amqpChannel.Cancel(c.options.ConsumerOptions.Name, false); err != nil {
 		return fmt.Errorf(errMessage, err)
 	}
 
 	c.conn.runningConsumers--
-
-	return nil
-}
-
-// DecodeDeliveryBody can be used to decode the body of a delivery into v.
-func (c *Consumer) DecodeDeliveryBody(delivery Delivery, v any) error {
-	const errMessage = "failed to decode delivery body: %w"
-
-	if err := c.conn.options.Codec.Decoder(delivery.Body, v); err != nil {
-		return fmt.Errorf(errMessage, err)
-	}
 
 	return nil
 }
@@ -100,7 +98,7 @@ func (c *Consumer) startConsuming() error {
 		return fmt.Errorf(errMessage, err)
 	}
 
-	if c.options.dlxRetryOptions != nil {
+	if c.options.RetryOptions != nil {
 		err = c.setupDeadLetterRetry()
 		if err != nil {
 			return fmt.Errorf(errMessage, err)
@@ -175,7 +173,7 @@ func (c *Consumer) handleMessage(delivery *Delivery) Action {
 
 	action := c.handler(delivery)
 
-	if action == NackDiscard && c.options.dlxRetryOptions != nil {
+	if action == NackDiscard && c.options.RetryOptions != nil {
 		action, err = c.handleDeadLetterMessage(delivery)
 		if err != nil {
 			c.conn.logger.logError("could not handle dead letter message: %v", err)

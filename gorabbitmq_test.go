@@ -1084,14 +1084,9 @@ func Test_Integration_DecodeDeliveryBody(t *testing.T) {
 				requireNoError(t, err)
 			})
 
-			consumer, err := gorabbitmq.NewConsumer(test.conn, stringGen(), nil,
-				gorabbitmq.WithQueueOptionAutoDelete(true),
-			)
-			requireNoError(t, err)
-
 			var result testData
 
-			err = consumer.DecodeDeliveryBody(delivery, &result)
+			err = test.conn.DecodeDeliveryBody(delivery, &result)
 			requireNoError(t, err)
 
 			requireEqual(t, message, result)
@@ -1396,12 +1391,12 @@ func handleFailedRecovery(chn <-chan error, wg *sync.WaitGroup) {
 func getConnection(t *testing.T, options ...gorabbitmq.ConnectionOption) *gorabbitmq.Connection {
 	t.Helper()
 
-	conn, err := gorabbitmq.NewConnection(&gorabbitmq.ConnectionSettings{
+	conn, err := gorabbitmq.NewConnection(gorabbitmq.SettingsToURI(&gorabbitmq.ConnectionSettings{
 		UserName: "guest",
 		Password: "guest",
 		Host:     "localhost",
 		Port:     5672,
-	},
+	}),
 		options...,
 	)
 

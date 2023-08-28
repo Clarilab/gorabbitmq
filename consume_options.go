@@ -18,6 +18,8 @@ const (
 	defaultDLXDelay1m  time.Duration = time.Minute
 	defaultDLXDelay10m time.Duration = 10 * time.Minute
 	defaultDLXDelay1h  time.Duration = time.Hour
+
+	defaultMaxRetries int64 = 10
 )
 
 type (
@@ -28,18 +30,28 @@ type (
 		ConsumerOptions *ConsumerOptions
 		QueueOptions    *QueueOptions
 		ExchangeOptions *ExchangeOptions
-		dlxRetryOptions *dlxRetryOptions
+		RetryOptions    *RetryOptions
 		Bindings        []Binding
 		// The number of message handlers, that will run concurrently.
 		HandlerQuantity int
 	}
 
-	dlxRetryOptions struct {
-		dlxPublisher *Publisher
-		delays       []time.Duration
-		maxRetries   int64
-		dlxName      string
-		dlqName      string
+	// RetryOptions are used to describe how the retry will be configured.
+	RetryOptions struct {
+		// Is used to handle the retries on a separate connection.
+		// If not specified, a connection will be created.
+		RetryConn *Connection
+		// The delays which a message will be exponentially redelivered with.
+		Delays []time.Duration
+		// The maximum number of times a message will be redelivered.
+		MaxRetries int64
+		// When enabled all retry related queues and exchanges associated when the consumer gets closed.
+		//
+		// Warning: Exiting messages on the retry queues will be purged.
+		Cleanup     bool
+		publisher   *Publisher
+		dlxName     string
+		dlqNameBase string
 	}
 
 	// ConsumerOptions are used to configure the consumer
@@ -279,22 +291,24 @@ func WithConsumerOptionConsumerName(consumerName string) ConsumeOption {
 // For each `delay` a dead letter queue will be declared.
 //
 // After exceeding `maxRetries` the delivery will be dropped.
-func WithConsumerOptionDeadLetterRetry(delays []time.Duration, maxRetries int64, publisher *Publisher) ConsumeOption {
+func WithConsumerOptionDeadLetterRetry(options *RetryOptions) ConsumeOption {
 	return func(opt *ConsumeOptions) {
-		if len(delays) == 0 {
-			delays = []time.Duration{
-				defaultDLXDelay1s,
-				defaultDLXDelay10s,
-				defaultDLXDelay1m,
-				defaultDLXDelay10m,
-				defaultDLXDelay1h,
+		if options != nil {
+			if len(options.Delays) == 0 {
+				options.Delays = []time.Duration{
+					defaultDLXDelay1s,
+					defaultDLXDelay10s,
+					defaultDLXDelay1m,
+					defaultDLXDelay10m,
+					defaultDLXDelay1h,
+				}
 			}
-		}
 
-		opt.dlxRetryOptions = &dlxRetryOptions{
-			delays:       delays,
-			dlxPublisher: publisher,
-			maxRetries:   maxRetries,
+			if options.MaxRetries <= 0 {
+				options.MaxRetries = defaultMaxRetries
+			}
+
+			opt.RetryOptions = options
 		}
 	}
 }
