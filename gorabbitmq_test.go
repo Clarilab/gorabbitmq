@@ -56,7 +56,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 	}{
 		"publish to exchange / consume with exchange NoWait": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -84,7 +84,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 		},
 		"publish to exchange passive": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, d.Body)
 					requireEqual(t, "application/octet-stream", d.ContentType)
 
@@ -112,7 +112,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 		},
 		"publish bytes message": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, d.Body)
 					requireEqual(t, "application/octet-stream", d.ContentType)
 
@@ -139,7 +139,7 @@ func Test_Integration_PublishToExchange(t *testing.T) {
 		},
 		"publish json message": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, "application/json", d.ContentType)
 
 					var result testData
@@ -253,7 +253,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 	}{
 		"publish to queue": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -279,7 +279,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 		},
 		"publish to queue passive": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -304,7 +304,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 		},
 		"publish to queue NoWait": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -328,7 +328,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 		},
 		"publish to priority queue": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 					requireEqual(t, 4, int(d.Priority))
@@ -353,7 +353,7 @@ func Test_Integration_PublishToQueue(t *testing.T) {
 		},
 		"publish to durable queue": {
 			deliveryHandler: func(expectedMessage any, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -440,7 +440,7 @@ func Test_Integration_Consume(t *testing.T) {
 	}{
 		"consume with Ack": {
 			deliveryHandler: func(expectedMessage any, counter int, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -468,7 +468,7 @@ func Test_Integration_Consume(t *testing.T) {
 		},
 		"consume with NackDisgard": {
 			deliveryHandler: func(expectedMessage any, counter int, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -493,7 +493,7 @@ func Test_Integration_Consume(t *testing.T) {
 		},
 		"consume with NackRequeue": {
 			deliveryHandler: func(expectedMessage any, counter int, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 					counter++
@@ -527,7 +527,7 @@ func Test_Integration_Consume(t *testing.T) {
 		},
 		"consume with Manual": {
 			deliveryHandler: func(expectedMessage any, counter int, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(delivery gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(delivery *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(delivery.Body))
 					requireEqual(t, "text/plain", delivery.ContentType)
 
@@ -558,7 +558,7 @@ func Test_Integration_Consume(t *testing.T) {
 		},
 		"consume with AutoAck": {
 			deliveryHandler: func(expectedMessage any, counter int, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -584,7 +584,7 @@ func Test_Integration_Consume(t *testing.T) {
 		},
 		"consume with consumer NoWait": {
 			deliveryHandler: func(expectedMessage any, counter int, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -610,7 +610,7 @@ func Test_Integration_Consume(t *testing.T) {
 		},
 		"consume with multiple message handlers": {
 			deliveryHandler: func(expectedMessage any, counter int, doneChan chan struct{}) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 
@@ -696,7 +696,7 @@ func Test_Integration_CustomOptions(t *testing.T) {
 		"publish with options": {
 			publishConn: getConnection(t),
 			deliveryHandler: func(expectedMessage any, wg *sync.WaitGroup) gorabbitmq.HandlerFunc {
-				return func(delivery gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(delivery *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(delivery.Body))
 					requireEqual(t, "test-service", delivery.AppId)
 					requireEqual(t, "guest", delivery.UserId)
@@ -755,7 +755,7 @@ func Test_Integration_CustomOptions(t *testing.T) {
 				))
 			}(),
 			deliveryHandler: func(expectedMessage any, wg *sync.WaitGroup) gorabbitmq.HandlerFunc {
-				return func(d gorabbitmq.Delivery) gorabbitmq.Action {
+				return func(d *gorabbitmq.Delivery) gorabbitmq.Action {
 					requireEqual(t, expectedMessage, string(d.Body))
 					requireEqual(t, "text/plain", d.ContentType)
 					requireEqual(t, "messageID", d.MessageId)
@@ -1185,7 +1185,7 @@ func Test_Reconnection_AutomaticReconnect(t *testing.T) { //nolint:paralleltest 
 	// msgCounter is used to count the number of deliveries, to compare it afterwords.
 	var msgCounter int
 
-	handler := func(msg gorabbitmq.Delivery) gorabbitmq.Action {
+	handler := func(msg *gorabbitmq.Delivery) gorabbitmq.Action {
 		requireEqual(t, message, string(msg.Body))
 
 		msgCounter++
@@ -1301,7 +1301,7 @@ func Test_Reconnection_AutomaticReconnectFailedTryManualReconnect(t *testing.T) 
 	// msgCounter is used to count the number of deliveries, to compare it afterwords.
 	var msgCounter int
 
-	handler := func(msg gorabbitmq.Delivery) gorabbitmq.Action {
+	handler := func(msg *gorabbitmq.Delivery) gorabbitmq.Action {
 		requireEqual(t, message, string(msg.Body))
 
 		msgCounter++

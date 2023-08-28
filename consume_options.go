@@ -2,6 +2,7 @@ package gorabbitmq
 
 import (
 	"fmt"
+	"time"
 )
 
 const (
@@ -11,6 +12,12 @@ const (
 	quorum             string = "quorum"
 	maxPriorityKey     string = "x-max-priority"
 	queueTypeKey       string = "x-queue-type"
+
+	defaultDLXDelay1s  time.Duration = time.Second
+	defaultDLXDelay10s time.Duration = 10 * time.Second
+	defaultDLXDelay1m  time.Duration = time.Minute
+	defaultDLXDelay10m time.Duration = 10 * time.Minute
+	defaultDLXDelay1h  time.Duration = time.Hour
 )
 
 type (
@@ -21,9 +28,18 @@ type (
 		ConsumerOptions *ConsumerOptions
 		QueueOptions    *QueueOptions
 		ExchangeOptions *ExchangeOptions
+		dlxRetryOptions *dlxRetryOptions
 		Bindings        []Binding
 		// The number of message handlers, that will run concurrently.
 		HandlerQuantity int
+	}
+
+	dlxRetryOptions struct {
+		dlxPublisher *Publisher
+		delays       []time.Duration
+		maxRetries   int64
+		dlxName      string
+		dlqName      string
 	}
 
 	// ConsumerOptions are used to configure the consumer
@@ -255,6 +271,31 @@ func WithConsumerOptionHandlerQuantity(concurrency int) ConsumeOption {
 func WithConsumerOptionConsumerName(consumerName string) ConsumeOption {
 	return func(options *ConsumeOptions) {
 		options.ConsumerOptions.Name = consumerName
+	}
+}
+
+// WithConsumerOptionDeadLetterRetry enables the dead letter retry.
+//
+// For each `delay` a dead letter queue will be declared.
+//
+// After exceeding `maxRetries` the delivery will be dropped.
+func WithConsumerOptionDeadLetterRetry(delays []time.Duration, maxRetries int64, publisher *Publisher) ConsumeOption {
+	return func(opt *ConsumeOptions) {
+		if len(delays) == 0 {
+			delays = []time.Duration{
+				defaultDLXDelay1s,
+				defaultDLXDelay10s,
+				defaultDLXDelay1m,
+				defaultDLXDelay10m,
+				defaultDLXDelay1h,
+			}
+		}
+
+		opt.dlxRetryOptions = &dlxRetryOptions{
+			delays:       delays,
+			dlxPublisher: publisher,
+			maxRetries:   maxRetries,
+		}
 	}
 }
 
