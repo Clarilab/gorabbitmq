@@ -1094,6 +1094,79 @@ func Test_Integration_DecodeDeliveryBody(t *testing.T) {
 	}
 }
 
+func Test_Integration_DeadLetterRetry(t *testing.T) {
+	t.Parallel()
+
+	testMessage := stringGen()
+	exchangeName := stringGen()
+	queueName := stringGen()
+	routingKey := stringGen()
+
+	publishConn := getConnection(t)
+	consumeConn := getConnection(t)
+
+	t.Cleanup(func() {
+		err := publishConn.Close()
+		requireNoError(t, err)
+
+		err = consumeConn.Close()
+		requireNoError(t, err)
+	})
+
+	publisher, err := gorabbitmq.NewPublisher(publishConn,
+		gorabbitmq.WithPublishOptionExchange(exchangeName),
+	)
+	requireNoError(t, err)
+
+	doneChan := make(chan struct{})
+
+	handler := func(delivery *gorabbitmq.Delivery) gorabbitmq.Action {
+		requireEqual(t, testMessage, string(delivery.Body))
+
+		retryCount, _ := delivery.Headers["x-retry-count"].(int32)
+
+		if retryCount < 2 {
+			return gorabbitmq.NackDiscard
+		}
+
+		doneChan <- struct{}{}
+
+		return gorabbitmq.Ack
+	}
+
+	consumer, err := gorabbitmq.NewConsumer(consumeConn, queueName, handler,
+		gorabbitmq.WithExchangeOptionDeclare(true),
+		gorabbitmq.WithExchangeOptionName(exchangeName),
+		gorabbitmq.WithExchangeOptionName(exchangeName),
+		gorabbitmq.WithExchangeOptionAutoDelete(true),
+		gorabbitmq.WithConsumerOptionRoutingKey(routingKey),
+		gorabbitmq.WithQueueOptionAutoDelete(true),
+		gorabbitmq.WithConsumerOptionDeadLetterRetry(
+			&gorabbitmq.RetryOptions{
+				RetryConn: publishConn,
+				Delays: []time.Duration{
+					time.Second,
+					time.Second * 2,
+					time.Second * 3,
+					time.Second * 4,
+					time.Second * 5,
+				},
+				MaxRetries: 5,
+				Cleanup:    true,
+			},
+		),
+	)
+	requireNoError(t, err)
+
+	err = publisher.Publish(context.Background(), routingKey, testMessage)
+	requireNoError(t, err)
+
+	<-doneChan
+
+	err = consumer.Close()
+	requireNoError(t, err)
+}
+
 // testBuffer is used as buffer for the logging io.Writer
 // with mutex protection for concurrent access.
 type testBuffer struct {
