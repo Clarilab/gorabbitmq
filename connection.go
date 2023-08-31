@@ -99,9 +99,9 @@ func (c *Connection) Close() error {
 		close(c.startRecoveryChan)
 		close(c.recoveryFailedChan)
 		close(c.consumerRecoveryChan)
-	}
 
-	c.logger.logInfo("gracefully closed connection to rabbitmq")
+		c.logger.logInfo("gracefully closed connection to rabbitmq")
+	}
 
 	return nil
 }
@@ -112,7 +112,7 @@ func (c *Connection) NotifyAutoRecoveryFail() <-chan error {
 	return c.recoveryFailedChan
 }
 
-// Reconnect can be used to manually reconnect to a RabbitMQ.
+// Reconnect can be used to manually reconnect to RabbitMQ.
 func (c *Connection) Reconnect() error {
 	const errMessage = "failed to reconnect to rabbitmq: %w"
 
@@ -157,7 +157,7 @@ func (c *Connection) RemoveBinding(queueName string, routingKey string, exchange
 	return nil
 }
 
-// ExchangeDelete removes the named exchange from the server. When an exchange is deleted all queue bindings
+// RemoveExchange removes the named exchange from the server. When an exchange is deleted all queue bindings
 // on the exchange are also deleted. If this exchange does not exist, the channel will be closed with an error.
 //
 // When ifUnused is true, the server will only delete the exchange if it has no queue bindings.
@@ -181,7 +181,7 @@ func (c *Connection) RemoveExchange(name string, ifUnused bool, noWait bool) err
 func (c *Connection) DecodeDeliveryBody(delivery Delivery, v any) error {
 	const errMessage = "failed to decode delivery body: %w"
 
-	if err := c.options.Codec.Decoder(delivery.Body, v); err != nil {
+	if err := c.options.codec.Decoder(delivery.Body, v); err != nil {
 		return fmt.Errorf(errMessage, err)
 	}
 

@@ -119,7 +119,7 @@ func (c *Consumer) startConsuming() error {
 	}
 
 	for i := 0; i < c.options.HandlerQuantity; i++ {
-		go c.handlerRoutine(deliveries, c.options)
+		go c.handlerRoutine(deliveries)
 	}
 
 	c.conn.logger.logDebug(fmt.Sprintf("Processing messages on %d message handlers", c.options.HandlerQuantity))
@@ -127,7 +127,7 @@ func (c *Consumer) startConsuming() error {
 	return nil
 }
 
-func (c *Consumer) handlerRoutine(deliveries <-chan amqp.Delivery, consumeOptions *ConsumeOptions) {
+func (c *Consumer) handlerRoutine(deliveries <-chan amqp.Delivery) {
 	for delivery := range deliveries {
 		delivery := &Delivery{delivery}
 
@@ -137,7 +137,7 @@ func (c *Consumer) handlerRoutine(deliveries <-chan amqp.Delivery, consumeOption
 			break
 		}
 
-		if consumeOptions.ConsumerOptions.AutoAck {
+		if c.options.ConsumerOptions.AutoAck {
 			c.handler(delivery)
 
 			continue

@@ -748,7 +748,6 @@ func Test_Integration_CustomOptions(t *testing.T) {
 					&gorabbitmq.ConnectionOptions{
 						ReturnHandler:     nil,
 						Config:            &amqpConfig,
-						Codec:             nil,
 						PrefetchCount:     0,
 						ReconnectInterval: 0,
 					},

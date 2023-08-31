@@ -29,7 +29,7 @@ type (
 		ReturnHandler
 		logger              []*slog.Logger
 		Config              *Config
-		Codec               *codec
+		codec               *codec
 		uri                 string
 		PrefetchCount       int
 		ReconnectInterval   time.Duration
@@ -62,7 +62,7 @@ func defaultConnectionOptions(uri string) *ConnectionOptions {
 			Properties: make(amqp.Table),
 		},
 		PrefetchCount: defaultPrefetchCount,
-		Codec: &codec{
+		codec: &codec{
 			Encoder: json.Marshal,
 			Decoder: json.Unmarshal,
 		},
@@ -136,12 +136,12 @@ func WithConnectionOptionPrefetchCount(count int) ConnectionOption {
 
 // WithConnectionOptionEncoder sets the encoder that will be used to encode messages.
 func WithConnectionOptionEncoder(encoder JSONEncoder) ConnectionOption {
-	return func(options *ConnectionOptions) { options.Codec.Encoder = encoder }
+	return func(options *ConnectionOptions) { options.codec.Encoder = encoder }
 }
 
 // WithConnectionOptionDecoder sets the decoder that will be used to decode messages.
 func WithConnectionOptionDecoder(decoder JSONDecoder) ConnectionOption {
-	return func(options *ConnectionOptions) { options.Codec.Decoder = decoder }
+	return func(options *ConnectionOptions) { options.codec.Decoder = decoder }
 }
 
 // WithConnectionOptionReturnHandler sets an Handler that can be used to handle undeliverable publishes.
