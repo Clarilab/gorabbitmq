@@ -198,18 +198,14 @@ func (c *Consumer) handleDeadLetterMessage(
 func (c *Consumer) closeDeadLetterRetry() error {
 	const errMessage = "failed to close dead letter exchange retry %w"
 
-	var err error
-
 	if c.options.RetryOptions.Cleanup {
-		err := c.cleanupDeadLetterRetry()
-		if err != nil {
+		if err := c.cleanupDeadLetterRetry(); err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 	}
 
 	if c.options.RetryOptions.isInternalConn {
-		err = c.options.RetryOptions.RetryConn.Close()
-		if err != nil {
+		if err := c.options.RetryOptions.RetryConn.Close(); err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
 	}

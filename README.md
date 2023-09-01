@@ -1,6 +1,6 @@
 ## INFO
 
-This library is a wrapper around the Go RabbitMQ Client Library. [Go RabbitMQ Client Library](https://github.com/rabbitmq/amqp091-go)
+This library is a wrapper around the [Go AMQP Client Library](https://github.com/rabbitmq/amqp091-go).
 
 This library also includes support for:
 - structured logging to multiple writers
@@ -91,7 +91,7 @@ The target can be a queue name, or a topic if the publisher is configured to pub
 
 Simple publish:
 ```Go
-err = publisher.Publish(context.TODO(), "my-target", "my-message")
+err = publisher.Publish(context.Background(), "my-target", "my-message")
 if err != nil {
 	// handle error
 }
@@ -102,7 +102,7 @@ The Method also gives the possibility to publish to multiple targets at once.
 
 Publish with options:
 ```Go
-err = publisher.PublishWithOptions(context.TODO(), []string{"my-target-1","my-target-2"}, "my-message",
+err = publisher.PublishWithOptions(context.Background(), []string{"my-target-1","my-target-2"}, "my-message",
 	gorabbitmq.WithPublishOptionMessageID("99819a3a-388f-4199-b7e6-cc580d85a2e5"),
 	gorabbitmq.WithPublishOptionTracing("7634e958-1509-479e-9246-5b80ad8fc64c"),
 )
@@ -263,4 +263,4 @@ For each given delay a separate dead letter queue is declared. When a delivery i
 
 ## External packages
 
-[Go RabbitMQ Client Library](https://github.com/rabbitmq/amqp091-go)
+[Go AMQP Client Library](https://github.com/rabbitmq/amqp091-go)
