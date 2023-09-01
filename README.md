@@ -1,132 +1,266 @@
 ## INFO
 
-This libary is a wrapper around the Go RabbitMQ Client Library. https://github.com/streadway/amqp
+This library is a wrapper around the Go RabbitMQ Client Library. [Go RabbitMQ Client Library](https://github.com/rabbitmq/amqp091-go)
+
+This library also includes support for:
+- structured logging to multiple writers
+- automatic recovery
+- retry functionality
 
 Supported Go Versions
 
-This library supports two most recent Go, currently 1.16
+This library supports the most recent Go, currently 1.21
 
 ## INSTALL
 
 ```bash
-go get github.com/Clarilab/gorabbitmq/v4
+go get github.com/Clarilab/gorabbitmq/v5
 ```
 
 ## USAGE
 
-### Initialization
+### The Connection
 
+First a connection instance needs to be initialized.
+The connection can be configured by passing needed connection options.
+Also there is the possibility to fully customize the configuration by passing a *ConnectionOptions* struct with the corresponding option.
+To ensure correct escaping of the URI, the *SettingsToURI* function can be used to convert a *ConnectionSettings* struct to a valid URI.
+
+#### Note:
+*Although it is possible to publish and consume with one connection, it is best practice to use two separate connections for publisher and consumer activities.*
+
+##### Connection with some options:
 ```Go
-connectionSettings := gorabbitmq.ConnectionSettings{
-    UserName: rabbitMQUser,
-    Password: rabbitMQPassword,
-    Host:     rabbitMQHost,
-    Port:     port,
-}
-channelSettings := gorabbitmq.channelSettings{
-    usePrefetch:   false
-    prefetchCount: 1
-}
-
-qConnector, err := gorabbitmq.NewConnection(connectionSettings,channelSettings)
-if err != nil {
-  return nil, errors.Wrap(err, "could not connect to new queue")
-}
-
-queueSettings := gorabbitmq.QueueSettings{
-  QueueName: queueName, // "ExampleQueueName"
-  Durable:          true,
-  DeleteWhenUnused: false,
-  Exclusive:        false,
-  NoWait:           false,
-}
-
-q, err := qConnector.ConnectToQueue(queueSettings)
-if err != nil {
-  return nil, errors.Wrap(err, "could not connect to queue")
-}
-return q, nil
+conn := gorabbitmq.NewConnection("amqp://admin:password@localhost:5672/", 
+	gorabbitmq.WithConnectionOptionConnectionName(service-name),
+	// more options can be passed
+)
 ```
 
-### Enqeue
+##### Connection with custom options:
+```Go
+connectionSettings := &gorabbitmq.ConnectionSettings{
+	UserName: "username",
+	Password: "password",
+	Host:     "host",
+	Port:     5672,
+}
+
+connectionOptions := &gorabbitmq.ConnectionOptions{
+	Config: &gorabbitmq.Config{
+		ChannelMax:      0,
+		FrameSize:       0,
+		Heartbeat:       0,
+		TLSClientConfig: &tls.Config{},
+		Properties:      map[string]interface{}{},
+		Locale:          "",
+	},
+	PrefetchCount:     1,
+	ReconnectInterval: 1,
+},
+
+conn := gorabbitmq.NewConnection(gorabbitmq.SettingsToURI(connectionSettings), 
+	gorabbitmq.WithCustomConnectionOptions(connectionOptions),
+)
+```
+
+When the connection is no longer needed, it should be closed to conserve resources.
+```Go
+conn.Close()
+```
+
+### Publish messages
+
+To publish messages a publisher instance needs to be created. A previously created connection must be handed over to the publisher.
+
+The publisher can be configured by passing needed connector options.
+Also there is the possibility to fully customize the configuration by passing a *PublishOptions* struct with the corresponding option. 
 
 ```Go
-err := q.Send(queueLoad)
+publisher, err := gorabbitmq.NewPublisher(conn,
+	gorabbitmq.WithPublishOptionAppID("my-application"),
+	gorabbitmq.WithPublishOptionExchange("my-exchange"),
+	// more options can be passed
+)
 if err != nil {
-    return errors.Wrap(err, "could not publish queue load")
+	// handle error
+}
+```
+The publisher can then be used to publish messages.
+The target can be a queue name, or a topic if the publisher is configured to publish messages to an exchange.
+
+Simple publish:
+```Go
+err = publisher.Publish(context.TODO(), "my-target", "my-message")
+if err != nil {
+	// handle error
+}
+```
+
+Optionally the *PublishWithOptions* method can be used to configure the publish options just for this specific publish.
+The Method also gives the possibility to publish to multiple targets at once.
+
+Publish with options:
+```Go
+err = publisher.PublishWithOptions(context.TODO(), []string{"my-target-1","my-target-2"}, "my-message",
+	gorabbitmq.WithPublishOptionMessageID("99819a3a-388f-4199-b7e6-cc580d85a2e5"),
+	gorabbitmq.WithPublishOptionTracing("7634e958-1509-479e-9246-5b80ad8fc64c"),
+)
+if err != nil {
+	// handle error
 }
 return nil
 ```
 
-### Consume
+### Consume Messages
 
-Replace the foo function with the function you want to use to handle the body you received from the queue.
+To consume messages a consumer instance needs to be created. A previously created connection must be handed over to the consumer.
+
+The consumer can be configured by passing needed consume options.
+Also there is the possibility to fully customize the configuration by passing a *ConsumeOptions* struct with the corresponding option. 
 
 ```Go
-consumerSettings := gorabbitmq.ConsumerSettings{AutoAck: false, Exclusive: false, NoLocal: false, NoWait: false}
-
-var queueLoad models.queueLoad
-fn := func(delivery amqp.Delivery) error {
-	if service.stopConsuming {
-		err := delivery.Nack(false, true)
-		if err != nil {
-			return errors.Wrap(err, "could not Nack")
-		}
-		return nil
-	}
-
-	if service.queue.IsClosed() {
-		return errors.New("queue channel was closed")
-	}
-
-	err := json.Unmarshal(delivery.Body, &queueLoad)
-	if err != nil {
-		nackErr := delivery.Nack(false, false)
-		if nackErr != nil {
-			return errors.Wrap(err, "could not Nack while unmarshal error")
-		}
-
-
-		return errors.Wrap(err, "could not unmarshal queueLoad")
-	}
-
-	err = foo(queueLoad) // METHOD TO HANDLE REQUEST 
-	if err != nil {
-
-		ackErr := delivery.Ack(false)
-		if err != nil {
-			return errors.Wrap(ackErr, "could not ack")
-		}
-		return errors.Wrap(err, "could not run foo()")
-	}
-
-	err = delivery.Ack(false)
-	if err != nil {
-		return errors.Wrap(err, "could not ack")
-	}
-	return nil
-}
-
-deliveryConsumer := gorabbitmq.DeliveryConsumer(fn)
-
-if service.queue == nil {
-    log.Error(errors.Wrap(errors.New("could not consume closed queue"), ""))
-    return
-}
-
-if service.queue.IsClosed() {
-    log.Error(errors.Wrap(errors.New("queue channel was closed"), ""))
-    return
-}
-
-err := service.queue.RegisterConsumer(consumerSettings, deliveryConsumer)
+consumer, err = gorabbitmq.NewConsumer(conn, "my-queue", handler(),
+		gorabbitmq.WithConsumerOptionConsumerName("my-consumer"),
+	// more options can be passed
+)
 if err != nil {
-    log.Error(errors.Wrap(err, "could not read items from the queue"))
+	// handle error
 }
 ```
 
+The consumer can be used to declare exchanges, queues and queue-bindings:
+```Go
+consumer, err := gorabbitmq.NewConsumer(conn, "my-queue", handler(),
+		gorabbitmq.WithConsumerOptionConsumerName("my-consumer"),
+		gorabbitmq.WithExchangeOptionDeclare(true),
+		gorabbitmq.WithExchangeOptionKind(gorabbitmq.ExchangeTopic),
+		gorabbitmq.WithExchangeOptionName("my-exchange"),
+		gorabbitmq.WithQueueOptionDeclare(false), // is enabled by default, can be used to disable the default behavior
+		gorabbitmq.WithConsumerOptionBinding(
+			gorabbitmq.Binding{
+				RoutingKey: "my-routing-key",
+			},
+		),
+		// more options can be passed
+	)
+	if err != nil {
+		// handle error
+	}
+```
+
+The consumer can be closed to stop consuming if needed. The consumer does not need to be explicitly closed for a graceful shutdown if its connection is closed afterwards. However when using the retry functionality without providing a connection, the consumer must be closed for a graceful shutdown of the retry connection to conserve resources.
+```Go
+consumer.Close()
+```
+
+### Logging:
+Structured logging is supported with the golang "log/slog" package. 
+A text- or json-logger can be specified with the desired log level. 
+The logs are written to a io.Writer that also can be specified.
+
+Note: Multiple loggers can be specified!
+
+```Go
+jsonBuff := new(bytes.Buffer)
+textBuff := new(bytes.Buffer)
+
+conn := gorabbitmq.NewConnection(connectionSettings, 
+	gorabbitmq.WithConnectionOptionTextLogging(os.Stdout, slog.LevelInfo),
+	gorabbitmq.WithConnectionOptionTextLogging(textBuff, slog.LevelWarn),
+	gorabbitmq.WithConnectionOptionJSONLogging(jsonBuff, slog.LevelDebug),
+)
+```
+
+### Return Handler:
+When publishing mandatory messages, they will be returned if it is not possible to route the message to the given destination. A return handler can be specified to handle the the return. The return contains the original message together with some information such as an error code and an error code description.
+
+If no return handler is specified a log will be written to the logger at warn level.
+
+```Go
+returnHandler := func(r gorabbitmq.Return) {
+	// handle the return
+}
+
+conn := gorabbitmq.NewConnection(connectionSettings, 
+	gorabbitmq.WithConnectionOptionReturnHandler(
+		gorabbitmq.ReturnHandler(returnHandler),
+	),
+)
+```
+
+### Recovery:
+
+This library provides an automatic recovery with build-in exponential back-off functionality. When the connection to the server is lost, the recovery will automatically try to reconnect. You can adjust the parameters of the back-off algorithm:
+
+```Go
+conn, err = gorabbitmq.NewConnection(settings,
+	gorabbitmq.WithConnectionOptionReconnectInterval(2),    // default is 1 second
+	gorabbitmq.WithConnectionOptionBackOffFactor(3),        // default is 2
+	gorabbitmq.WithConnectionOptionMaxReconnectRetries(16), // default is 10
+)
+```
+
+For the case the maximum number of retries is reached, the connection provides a *NotifyAutoRecoveryFail* method which provides a channel that will return an error for you to handle:
+
+```Go
+handleFailedRecovery := func(failedRecovery <-chan error) {
+	for err := range failedRecovery {
+		if err != nil {
+			// handle failed recovery
+		}
+	}
+}
+
+conn, err = gorabbitmq.NewConnection(settings)
+
+handleFailedRecovery(conn.NotifyAutoRecoveryFail())
+```
+
+### Retry:
+
+This library includes a retry functionality with a dead letter exchange and dead letter queues. To use the retry, some parameters have to be set:
+
+```Go
+connectionSettings := &gorabbitmq.ConnectionSettings{
+	UserName: "username",
+	Password: "password",
+	Host:     "host",
+	Port:     5672,
+}
+
+publishConn, err := gorabbitmq.NewConnection(gorabbitmq.SettingsToURI(connectionSettings))
+if err != nil {
+	// handle error
+}
+
+consumeConn, err := gorabbitmq.NewConnection(gorabbitmq.SettingsToURI(connectionSettings))
+if err != nil {
+	// handle error
+}
+
+retryOptions := &gorabbitmq.RetryOptions{
+	RetryConn: publishConn,
+	Delays: []time.Duration{
+		time.Second,
+		time.Second * 2,
+		time.Second * 3,
+		time.Second * 4,
+		time.Second * 5,
+	},
+	MaxRetries: 5,
+	Cleanup:    true, // only set this to true if you want to remove all retry related queues and exchanges when closing the consumer
+},
+
+consumer, err := gorabbitmq.NewConsumer(consumeConn, queueName, handler,
+		gorabbitmq.WithConsumerOptionDeadLetterRetry(retryOptions),
+	)
+```
+
+It is recommended to provide a separate publish connection for the retry functionality. If no connection is specified, a separate connection is established internally. 
+
+For each given delay a separate dead letter queue is declared. When a delivery is nacked by the consumer, it is republished via the delay queues one after another until it is acknowledged or the specified maximum number of retry attempts is reached. 
+
 ## External packages
 
-[Go RabbitMQ Client Library](https://github.com/streadway/amqp)
-
-github.com/isayme/go-amqp-reconnect
+[Go RabbitMQ Client Library](https://github.com/rabbitmq/amqp091-go)
