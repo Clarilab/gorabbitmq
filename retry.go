@@ -87,6 +87,8 @@ func (c *Consumer) setupRetryPublisher() error {
 		if err != nil {
 			return fmt.Errorf(errMessage, err)
 		}
+
+		c.options.RetryOptions.isInternalConn = true
 	}
 
 	c.options.RetryOptions.publisher, err = NewPublisher(c.options.RetryOptions.RetryConn)
@@ -191,6 +193,28 @@ func (c *Consumer) handleDeadLetterMessage(
 
 	// acknowledge delivery to the original queue
 	return Ack, nil
+}
+
+func (c *Consumer) closeDeadLetterRetry() error {
+	const errMessage = "failed to close dead letter exchange retry %w"
+
+	var err error
+
+	if c.options.RetryOptions.Cleanup {
+		err := c.cleanupDeadLetterRetry()
+		if err != nil {
+			return fmt.Errorf(errMessage, err)
+		}
+	}
+
+	if c.options.RetryOptions.isInternalConn {
+		err = c.options.RetryOptions.RetryConn.Close()
+		if err != nil {
+			return fmt.Errorf(errMessage, err)
+		}
+	}
+
+	return nil
 }
 
 func (c *Consumer) cleanupDeadLetterRetry() error {
